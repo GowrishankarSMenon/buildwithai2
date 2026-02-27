@@ -8,16 +8,16 @@ Provides realistic fake data for 10 major shipping hub locations:
 # ── 10 Fixed Shipping Locations ──────────────────────────────────────
 
 LOCATIONS = [
-    {"name": "Shanghai",    "country": "China",       "type": "port"},
-    {"name": "Singapore",   "country": "Singapore",   "type": "port"},
-    {"name": "Mumbai",      "country": "India",       "type": "port"},
-    {"name": "Dubai",       "country": "UAE",         "type": "port"},
-    {"name": "Rotterdam",   "country": "Netherlands", "type": "port"},
-    {"name": "Los Angeles", "country": "USA",         "type": "port"},
-    {"name": "Colombo",     "country": "Sri Lanka",   "type": "port"},
-    {"name": "Tokyo",       "country": "Japan",       "type": "port"},
-    {"name": "Hamburg",     "country": "Germany",     "type": "port"},
-    {"name": "Sydney",      "country": "Australia",   "type": "port"},
+    {"name": "Shanghai",    "country": "China",       "type": "port",    "lat": 31.2304,  "lng": 121.4737},
+    {"name": "Singapore",   "country": "Singapore",   "type": "port",    "lat": 1.2644,   "lng": 103.8222},
+    {"name": "Mumbai",      "country": "India",       "type": "port",    "lat": 18.9500,  "lng": 72.9500},
+    {"name": "Dubai",       "country": "UAE",         "type": "port",    "lat": 25.0143,  "lng": 55.0802},
+    {"name": "Rotterdam",   "country": "Netherlands", "type": "port",    "lat": 51.9054,  "lng": 4.4666},
+    {"name": "Los Angeles", "country": "USA",         "type": "port",    "lat": 33.7405,  "lng": -118.2723},
+    {"name": "Colombo",     "country": "Sri Lanka",   "type": "port",    "lat": 6.9497,   "lng": 79.8428},
+    {"name": "Tokyo",       "country": "Japan",       "type": "port",    "lat": 35.6762,  "lng": 139.6503},
+    {"name": "Hamburg",     "country": "Germany",     "type": "port",    "lat": 53.5511,  "lng": 9.9937},
+    {"name": "Sydney",      "country": "Australia",   "type": "port",    "lat": -33.8688, "lng": 151.2093},
 ]
 
 LOCATION_NAMES = [loc["name"] for loc in LOCATIONS]
