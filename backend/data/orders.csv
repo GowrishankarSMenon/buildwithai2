@@ -1,0 +1,4 @@
+order_id,product_id,quantity,deadline_days
+O1,P1,200,4
+O2,P2,150,6
+O3,P3,500,3
