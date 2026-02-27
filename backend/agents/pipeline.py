@@ -84,7 +84,9 @@ def run_agent_pipeline(
     _log_output("weather", monitoring.weather_summary)
     for seg in monitoring.segments:
         delay_str = f" ⚠️ +{seg.delay_days}d delay" if seg.delay_days > 0 else ""
-        _log_output("segment", f"{seg.from_location} → {seg.to_location} | ETA {seg.eta_days}d{delay_str} | Weather: {seg.weather_risk}")
+        disrupt_str = f" | 🚨 {seg.disruption_type}" if seg.disruption_active else ""
+        _log_output("segment", f"{seg.from_location} → {seg.to_location} | ETA {seg.eta_days}d{delay_str} | Weather: {seg.weather_risk}{disrupt_str}")
+    _log_output("disruptions", monitoring.disruption_summary)
     _log_output("llm_analysis", monitoring.llm_analysis[:150] + "..." if len(monitoring.llm_analysis) > 150 else monitoring.llm_analysis)
     _log_done("MonitoringAgent", time.time() - t)
 

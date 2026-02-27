@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agents.pipeline import run_agent_pipeline
+from services.mock_data import LOCATIONS, LOCATION_NAMES, get_location_info
 
 # ── FastAPI App ───────────────────────────────────────────────────────
 
@@ -65,6 +66,17 @@ class ExecutePlanRequest(BaseModel):
 def status():
     """Health check endpoint."""
     return {"status": "running", "service": "Agentic Disruption Shield"}
+
+
+@app.get("/locations")
+def get_locations():
+    """Return all available shipping locations with weather & disruption data."""
+    return {
+        "locations": [
+            {**loc, **get_location_info(loc["name"])}
+            for loc in LOCATIONS
+        ]
+    }
 
 
 @app.post("/run-agents")
@@ -131,3 +143,8 @@ def execute_plan(request: ExecutePlanRequest):
             **response,
         },
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

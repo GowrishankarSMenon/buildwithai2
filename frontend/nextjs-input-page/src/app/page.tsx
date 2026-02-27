@@ -14,7 +14,7 @@
  * - Execute plan button for mock execution
  */
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -33,6 +33,15 @@ interface SegmentReport {
   delay_days: number;
   weather_risk: string;
   weather_detail: string;
+  disruption_type: string;
+  disruption_detail: string;
+  disruption_active: boolean;
+}
+
+interface LocationInfo {
+  name: string;
+  country: string;
+  type: string;
 }
 
 interface SimulationEntry {
@@ -53,6 +62,7 @@ interface AgentResult {
     total_delay: number;
     total_transit_days: number;
     weather_summary: string;
+    disruption_summary: string;
     llm_analysis: string;
   };
   risk: {
@@ -102,6 +112,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 // ── Component ────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  // Locations from backend
+  const [locations, setLocations] = useState<LocationInfo[]>([]);
+
   // Form state
   const [productId, setProductId] = useState("P1");
   const [origin, setOrigin] = useState("Shanghai");
@@ -118,7 +131,26 @@ export default function HomePage() {
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<Record<string, unknown> | null>(null);
 
-  let nextId = stops.length > 0 ? Math.max(...stops.map((s) => s.id)) + 1 : 1;
+  // Fetch locations on mount
+  useEffect(() => {
+    axios.get(`${API_BASE}/locations`)
+      .then(res => setLocations(res.data.locations))
+      .catch(() => {
+        // Fallback hardcoded locations if backend not available
+        setLocations([
+          { name: "Shanghai", country: "China", type: "port" },
+          { name: "Singapore", country: "Singapore", type: "port" },
+          { name: "Mumbai", country: "India", type: "port" },
+          { name: "Dubai", country: "UAE", type: "port" },
+          { name: "Rotterdam", country: "Netherlands", type: "port" },
+          { name: "Los Angeles", country: "USA", type: "port" },
+          { name: "Colombo", country: "Sri Lanka", type: "port" },
+          { name: "Tokyo", country: "Japan", type: "port" },
+          { name: "Hamburg", country: "Germany", type: "port" },
+          { name: "Sydney", country: "Australia", type: "port" },
+        ]);
+      });
+  }, []);
 
   // ── Stop Management ──────────────────────────────────────────────
 
@@ -232,23 +264,33 @@ export default function HomePage() {
             <div className="form-group" />
             <div className="form-group">
               <label>From (Origin)</label>
-              <input
-                type="text"
-                placeholder="e.g. Shanghai"
+              <select
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 required
-              />
+              >
+                <option value="" disabled>Select origin</option>
+                {locations.map((loc) => (
+                  <option key={loc.name} value={loc.name}>
+                    {loc.name}, {loc.country}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>To (Destination)</label>
-              <input
-                type="text"
-                placeholder="e.g. Mumbai"
+              <select
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 required
-              />
+              >
+                <option value="" disabled>Select destination</option>
+                {locations.map((loc) => (
+                  <option key={loc.name} value={loc.name}>
+                    {loc.name}, {loc.country}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -264,15 +306,20 @@ export default function HomePage() {
             <div key={stop.id} className="stop-item">
               <div className="form-group">
                 <label>Stop #{index + 1}</label>
-                <input
-                  type="text"
-                  placeholder="City name"
+                <select
                   value={stop.stop_name}
                   onChange={(e) =>
                     updateStop(stop.id, "stop_name", e.target.value)
                   }
                   required
-                />
+                >
+                  <option value="" disabled>Select stop</option>
+                  {locations.map((loc) => (
+                    <option key={loc.name} value={loc.name}>
+                      {loc.name}, {loc.country}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label>ETA (days)</label>
@@ -369,6 +416,12 @@ export default function HomePage() {
                       </span>
                     )}
                     {" · "}Weather: {seg.weather_risk}
+                    {seg.disruption_active && (
+                      <span style={{ color: "var(--accent-red)", fontWeight: 600 }}>
+                        {" "}
+                        · 🚨 {seg.disruption_type}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -391,6 +444,9 @@ export default function HomePage() {
             </div>
             <p style={{ marginTop: "0.75rem", fontSize: "0.82rem", color: "var(--text-muted)" }}>
               {result.monitoring.weather_summary}
+            </p>
+            <p style={{ marginTop: "0.35rem", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+              {result.monitoring.disruption_summary}
             </p>
           </div>
 

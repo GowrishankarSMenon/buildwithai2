@@ -1,18 +1,18 @@
 """
-MonitoringAgent — Shipment Delay Detection & Weather Risk
-=========================================================
+MonitoringAgent — Shipment Delay Detection & Weather/Disruption Risk
+=====================================================================
 AGENTIC REASONING: This agent acts as the "eyes" of the system.
 It autonomously monitors each shipment segment, detects delays,
-and adds environmental risk factors (mock weather data).
+and incorporates real weather and disruption data for each location.
 
 The agent processes raw route data and produces a structured
 monitoring report that feeds into the risk assessment pipeline.
 """
 
-import random
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from services.groq_client import get_llm
+from services.mock_data import get_weather, get_disruption
 
 
 # ── Structured Output Models ──────────────────────────────────────────
@@ -25,6 +25,9 @@ class SegmentReport(BaseModel):
     delay_days: float
     weather_risk: str  # "low", "medium", "high"
     weather_detail: str
+    disruption_type: str
+    disruption_detail: str
+    disruption_active: bool
 
 
 class MonitoringResult(BaseModel):
@@ -37,19 +40,26 @@ class MonitoringResult(BaseModel):
     total_delay: float
     total_transit_days: float
     weather_summary: str
+    disruption_summary: str
     llm_analysis: str  # LLM-generated natural language analysis
 
 
-# ── Mock Weather Risk Generator ──────────────────────────────────────
+# ── Weather & Disruption Data Lookup ─────────────────────────────────
 
-def _mock_weather_risk(location: str) -> tuple[str, str]:
-    """Generate mock weather risk for a location."""
-    risks = [
-        ("low", f"Clear conditions expected near {location}"),
-        ("medium", f"Moderate rain forecasted near {location}, possible minor delays"),
-        ("high", f"Severe storm warning near {location}, significant delays likely"),
-    ]
-    return random.choice(risks)
+def _get_location_risks(location: str) -> tuple[str, str, str, str, bool]:
+    """
+    Get weather risk and disruption data for a location.
+    Returns: (weather_risk, weather_detail, disruption_type, disruption_detail, disruption_active)
+    """
+    weather = get_weather(location)
+    disruption = get_disruption(location)
+    return (
+        weather["risk"],
+        weather["detail"],
+        disruption["type"],
+        disruption["detail"],
+        disruption["active"],
+    )
 
 
 # ── Agent Entry Point ────────────────────────────────────────────────
@@ -73,32 +83,42 @@ def run_monitoring_agent(
         MonitoringResult with segment-level and aggregated data
     """
 
-    # ── Step 1: Build segment reports with weather risk ──
+    # ── Step 1: Build segment reports with weather & disruption data ──
     segments: list[SegmentReport] = []
     prev_location = origin
 
     for stop in stops:
-        weather_risk, weather_detail = _mock_weather_risk(stop["stop_name"])
+        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active = _get_location_risks(stop["stop_name"])
+        disruption = get_disruption(stop["stop_name"])
+        extra_delay = disruption["extra_delay_days"]
         segments.append(SegmentReport(
             from_location=prev_location,
             to_location=stop["stop_name"],
             eta_days=stop["eta_days"],
-            delay_days=stop["delay_days"],
+            delay_days=stop["delay_days"] + extra_delay,
             weather_risk=weather_risk,
             weather_detail=weather_detail,
+            disruption_type=disrupt_type,
+            disruption_detail=disrupt_detail,
+            disruption_active=disrupt_active,
         ))
         prev_location = stop["stop_name"]
 
     # Final segment to destination
     if prev_location != destination:
-        weather_risk, weather_detail = _mock_weather_risk(destination)
+        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active = _get_location_risks(destination)
+        disruption = get_disruption(destination)
+        extra_delay = disruption["extra_delay_days"]
         segments.append(SegmentReport(
             from_location=prev_location,
             to_location=destination,
             eta_days=stops[-1]["eta_days"] if stops else 1,
-            delay_days=0,
+            delay_days=0 + extra_delay,
             weather_risk=weather_risk,
             weather_detail=weather_detail,
+            disruption_type=disrupt_type,
+            disruption_detail=disrupt_detail,
+            disruption_active=disrupt_active,
         ))
 
     # ── Step 2: Aggregate totals ──
@@ -108,9 +128,17 @@ def run_monitoring_agent(
 
     # ── Step 3: Use LLM to generate natural language analysis ──
     segment_text = "\n".join(
-        f"  - {s.from_location} → {s.to_location}: ETA {s.eta_days}d, Delay {s.delay_days}d, Weather: {s.weather_risk} ({s.weather_detail})"
+        f"  - {s.from_location} → {s.to_location}: ETA {s.eta_days}d, Delay {s.delay_days}d, Weather: {s.weather_risk} ({s.weather_detail}), Disruption: {s.disruption_type} ({s.disruption_detail})"
         for s in segments
     )
+
+    disrupted_segments = [s for s in segments if s.disruption_active]
+    disruption_text = ""
+    if disrupted_segments:
+        disruption_text = "\n\nActive Disruptions:\n" + "\n".join(
+            f"  - {s.to_location}: {s.disruption_type} — {s.disruption_detail}"
+            for s in disrupted_segments
+        )
 
     prompt = f"""You are a supply chain monitoring AI agent. Analyze this shipment route and provide a concise monitoring summary.
 
@@ -122,11 +150,13 @@ Segments:
 Total ETA: {total_eta} days
 Total Delays: {total_delay} days
 Total Transit Time: {total_transit} days
+{disruption_text}
 
 Provide a brief 2-3 sentence analysis covering:
 1. Overall shipment status and key delay points
 2. Weather risk assessment across the route
-3. Whether the shipment is on track or at risk
+3. Active disruptions (port strikes, congestion, customs delays) and their impact
+4. Whether the shipment is on track or at risk
 
 Be direct and actionable. This feeds into the risk assessment pipeline."""
 
@@ -147,6 +177,15 @@ Be direct and actionable. This feeds into the risk assessment pipeline."""
     else:
         weather_summary = "✅ Clear weather across all segments"
 
+    # ── Step 5: Disruption summary ──
+    active_disruptions = [s for s in segments if s.disruption_active]
+    if active_disruptions:
+        disruption_summary = f"🚨 {len(active_disruptions)} active disruption(s): " + ", ".join(
+            f"{s.to_location} ({s.disruption_type})" for s in active_disruptions
+        )
+    else:
+        disruption_summary = "✅ No active disruptions on route"
+
     return MonitoringResult(
         product_id=product_id,
         origin=origin,
@@ -156,5 +195,6 @@ Be direct and actionable. This feeds into the risk assessment pipeline."""
         total_delay=total_delay,
         total_transit_days=total_transit,
         weather_summary=weather_summary,
+        disruption_summary=disruption_summary,
         llm_analysis=llm_analysis,
     )

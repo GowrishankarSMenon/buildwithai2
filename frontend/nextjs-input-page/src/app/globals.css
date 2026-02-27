@@ -117,7 +117,8 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.form-group input {
+.form-group input,
+.form-group select {
   background: var(--bg-glass);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius);
@@ -127,10 +128,16 @@ html, body {
   font-family: inherit;
   transition: border-color 0.2s ease, background 0.2s ease;
   outline: none;
+  width: 100%;
 }
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   border-color: var(--accent-blue);
   background: rgba(59, 130, 246, 0.05);
+}
+.form-group select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 .form-group input::placeholder {
   color: var(--text-muted);
@@ -153,7 +160,8 @@ html, body {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.stop-item input {
+.stop-item input,
+.stop-item select {
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border-glass);
   border-radius: 8px;
@@ -164,8 +172,13 @@ html, body {
   outline: none;
   transition: border-color 0.2s;
 }
-.stop-item input:focus {
+.stop-item input:focus,
+.stop-item select:focus {
   border-color: var(--accent-cyan);
+}
+.stop-item select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* ── Buttons ───────────────────────────────────────── */

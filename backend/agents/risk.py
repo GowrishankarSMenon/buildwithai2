@@ -119,6 +119,7 @@ Pending Orders: {len(pending_orders)}
 
 Monitoring Summary: {monitoring.llm_analysis}
 Weather: {monitoring.weather_summary}
+Disruptions: {monitoring.disruption_summary}
 
 Provide a 2-3 sentence risk assessment covering:
 1. Whether current stock will last until shipment arrives
