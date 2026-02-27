@@ -17,7 +17,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agents.pipeline import run_agent_pipeline
 from services.mock_data import LOCATIONS, LOCATION_NAMES, get_location_info
-from services.tavily_client import fetch_realtime_disruptions, fetch_realtime_weather
 
 # ── FastAPI App ───────────────────────────────────────────────────────
 
@@ -72,19 +71,26 @@ def status():
 
 @app.get("/locations")
 def get_locations(mode: str = "simulation"):
-    """Return all available shipping locations with weather & disruption data."""
+    """
+    Return all available shipping locations with weather & disruption data.
+    In realtime mode, we only return basic location info here — Tavily is called
+    per-port during the agent pipeline (run-agents) to avoid unnecessary API calls.
+    """
     if mode == "realtime":
-        locations = []
-        for loc in LOCATIONS:
-            weather = fetch_realtime_weather(loc["name"], loc["country"])
-            disruption = fetch_realtime_disruptions(loc["name"], loc["country"])
-            locations.append({
-                **loc,
-                "location": loc["name"],
-                "weather": weather,
-                "disruption": disruption,
-            })
-        return {"locations": locations, "mode": "realtime"}
+        # Return locations with basic metadata only; Tavily is invoked
+        # during the agent pipeline for the ports the user actually selects.
+        return {
+            "locations": [
+                {
+                    **loc,
+                    "location": loc["name"],
+                    "weather": {"risk": "unknown", "detail": "Run agent pipeline for live data", "condition": "Pending"},
+                    "disruption": {"active": False, "type": "Pending", "detail": "Run agent pipeline for live data", "severity": "low", "extra_delay_days": 0.0},
+                }
+                for loc in LOCATIONS
+            ],
+            "mode": "realtime",
+        }
     else:
         return {
             "locations": [

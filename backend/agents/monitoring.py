@@ -59,11 +59,13 @@ def _get_country_for_location(location: str) -> str:
     return ""
 
 
-def _get_location_risks(location: str, mode: str = "simulation") -> tuple[str, str, str, str, bool]:
+def _get_location_risks(location: str, mode: str = "simulation") -> tuple[str, str, str, str, bool, float]:
     """
     Get weather risk and disruption data for a location.
     Mode: "simulation" uses mock data, "realtime" uses Tavily API.
-    Returns: (weather_risk, weather_detail, disruption_type, disruption_detail, disruption_active)
+    Returns: (weather_risk, weather_detail, disruption_type, disruption_detail, disruption_active, extra_delay_days)
+
+    Tavily is only invoked for ports the user has selected in their route.
     """
     if mode == "realtime":
         country = _get_country_for_location(location)
@@ -79,6 +81,7 @@ def _get_location_risks(location: str, mode: str = "simulation") -> tuple[str, s
         disruption["type"],
         disruption["detail"],
         disruption["active"],
+        disruption.get("extra_delay_days", 0.0),
     )
 
 
@@ -110,13 +113,7 @@ def run_monitoring_agent(
     prev_location = origin
 
     for stop in stops:
-        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active = _get_location_risks(stop["stop_name"], mode)
-        if mode == "realtime":
-            country = _get_country_for_location(stop["stop_name"])
-            disruption = fetch_realtime_disruptions(stop["stop_name"], country)
-        else:
-            disruption = get_disruption(stop["stop_name"])
-        extra_delay = disruption["extra_delay_days"]
+        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active, extra_delay = _get_location_risks(stop["stop_name"], mode)
         segments.append(SegmentReport(
             from_location=prev_location,
             to_location=stop["stop_name"],
@@ -132,13 +129,7 @@ def run_monitoring_agent(
 
     # Final segment to destination
     if prev_location != destination:
-        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active = _get_location_risks(destination, mode)
-        if mode == "realtime":
-            country = _get_country_for_location(destination)
-            disruption = fetch_realtime_disruptions(destination, country)
-        else:
-            disruption = get_disruption(destination)
-        extra_delay = disruption["extra_delay_days"]
+        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active, extra_delay = _get_location_risks(destination, mode)
         segments.append(SegmentReport(
             from_location=prev_location,
             to_location=destination,

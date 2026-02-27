@@ -143,8 +143,8 @@ export default function MapView({
 
     return (
         <MapContainer
-            center={[20, 40]}
-            zoom={3}
+            center={[20, 78]}
+            zoom={5}
             className="mp-map"
             zoomControl={true}
             attributionControl={true}

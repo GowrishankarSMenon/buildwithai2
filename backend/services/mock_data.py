@@ -1,23 +1,23 @@
 """
 mock_data.py — Hardcoded Mock Data for Locations, Weather & Disruptions
 ========================================================================
-Provides realistic fake data for 10 major shipping hub locations:
+Provides realistic fake data for 10 major Indian shipping ports:
   weather conditions, port disruptions, and location metadata.
 """
 
-# ── 10 Fixed Shipping Locations ──────────────────────────────────────
+# ── 10 Real Indian Ports ──────────────────────────────────────
 
 LOCATIONS = [
-    {"name": "Shanghai",    "country": "China",       "type": "port",    "lat": 31.2304,  "lng": 121.4737},
-    {"name": "Singapore",   "country": "Singapore",   "type": "port",    "lat": 1.2644,   "lng": 103.8222},
-    {"name": "Mumbai",      "country": "India",       "type": "port",    "lat": 18.9500,  "lng": 72.9500},
-    {"name": "Dubai",       "country": "UAE",         "type": "port",    "lat": 25.0143,  "lng": 55.0802},
-    {"name": "Rotterdam",   "country": "Netherlands", "type": "port",    "lat": 51.9054,  "lng": 4.4666},
-    {"name": "Los Angeles", "country": "USA",         "type": "port",    "lat": 33.7405,  "lng": -118.2723},
-    {"name": "Colombo",     "country": "Sri Lanka",   "type": "port",    "lat": 6.9497,   "lng": 79.8428},
-    {"name": "Tokyo",       "country": "Japan",       "type": "port",    "lat": 35.6762,  "lng": 139.6503},
-    {"name": "Hamburg",     "country": "Germany",     "type": "port",    "lat": 53.5511,  "lng": 9.9937},
-    {"name": "Sydney",      "country": "Australia",   "type": "port",    "lat": -33.8688, "lng": 151.2093},
+    {"name": "Nhava Sheva (JNPT)", "country": "India", "type": "port", "lat": 18.9490,  "lng": 72.9510},
+    {"name": "Chennai",            "country": "India", "type": "port", "lat": 13.0827,  "lng": 80.2707},
+    {"name": "Kochi",              "country": "India", "type": "port", "lat": 9.9312,   "lng": 76.2673},
+    {"name": "Visakhapatnam",      "country": "India", "type": "port", "lat": 17.6868,  "lng": 83.2185},
+    {"name": "Mundra",             "country": "India", "type": "port", "lat": 22.8394,  "lng": 69.7250},
+    {"name": "Kolkata (Haldia)",   "country": "India", "type": "port", "lat": 22.0257,  "lng": 88.0583},
+    {"name": "Kandla",             "country": "India", "type": "port", "lat": 23.0333,  "lng": 70.2167},
+    {"name": "Tuticorin",          "country": "India", "type": "port", "lat": 8.7642,   "lng": 78.1348},
+    {"name": "New Mangalore",      "country": "India", "type": "port", "lat": 12.9141,  "lng": 74.8560},
+    {"name": "Paradip",            "country": "India", "type": "port", "lat": 20.2644,  "lng": 86.6085},
 ]
 
 LOCATION_NAMES = [loc["name"] for loc in LOCATIONS]
@@ -26,65 +26,65 @@ LOCATION_NAMES = [loc["name"] for loc in LOCATIONS]
 # ── Mock Weather Data (per location) ────────────────────────────────
 
 WEATHER_DATA: dict[str, dict] = {
-    "Shanghai": {
+    "Nhava Sheva (JNPT)": {
         "risk": "high",
-        "detail": "Typhoon warning active in East China Sea — heavy rain, 60 km/h winds, port operations intermittent",
-        "temp_c": 28,
-        "condition": "Typhoon",
-    },
-    "Singapore": {
-        "risk": "low",
-        "detail": "Clear skies with light tropical showers — no impact on port operations",
-        "temp_c": 32,
-        "condition": "Partly Cloudy",
-    },
-    "Mumbai": {
-        "risk": "high",
-        "detail": "Monsoon season — continuous heavy rainfall causing waterlogging near port, reduced crane operations",
+        "detail": "Monsoon season — continuous heavy rainfall causing waterlogging near port, reduced crane operations at JNPT",
         "temp_c": 29,
         "condition": "Heavy Rain",
     },
-    "Dubai": {
-        "risk": "low",
-        "detail": "Clear and dry conditions — optimal port operations, visibility excellent",
-        "temp_c": 42,
-        "condition": "Sunny",
-    },
-    "Rotterdam": {
+    "Chennai": {
         "risk": "medium",
-        "detail": "Dense fog advisory along North Sea coast — vessel speed restrictions in channel approach",
-        "temp_c": 8,
-        "condition": "Fog",
-    },
-    "Los Angeles": {
-        "risk": "medium",
-        "detail": "Santa Ana winds gusting to 45 km/h — minor delays in container handling at Long Beach",
-        "temp_c": 24,
-        "condition": "Windy",
-    },
-    "Colombo": {
-        "risk": "medium",
-        "detail": "Southwest monsoon bringing moderate rainfall — slight delays in cargo loading/unloading",
+        "detail": "Northeast monsoon bringing moderate to heavy rainfall — intermittent delays in cargo handling at Chennai port",
         "temp_c": 30,
+        "condition": "Rain",
+    },
+    "Kochi": {
+        "risk": "medium",
+        "detail": "Southwest monsoon active — moderate rainfall affecting Cochin port operations, slight berthing delays",
+        "temp_c": 28,
         "condition": "Moderate Rain",
     },
-    "Tokyo": {
-        "risk": "low",
-        "detail": "Calm seas and clear weather — Yokohama port operating at full capacity",
-        "temp_c": 18,
-        "condition": "Clear",
-    },
-    "Hamburg": {
+    "Visakhapatnam": {
         "risk": "high",
-        "detail": "North Sea storm surge warning — Elbe river traffic suspended, 3-day port closure expected",
-        "temp_c": 4,
-        "condition": "Storm",
+        "detail": "Cyclone warning in Bay of Bengal — Visakhapatnam port on high alert, vessel movements restricted",
+        "temp_c": 31,
+        "condition": "Cyclone Warning",
     },
-    "Sydney": {
+    "Mundra": {
         "risk": "low",
-        "detail": "Mild autumn weather — all berths operational, no weather-related delays",
-        "temp_c": 22,
+        "detail": "Clear and dry conditions — Mundra port operating at full capacity, no weather-related disruptions",
+        "temp_c": 35,
+        "condition": "Sunny",
+    },
+    "Kolkata (Haldia)": {
+        "risk": "high",
+        "detail": "Heavy rainfall and river flooding — Hooghly river channel depth reduced, draft restrictions in effect at Haldia",
+        "temp_c": 33,
+        "condition": "Heavy Rain",
+    },
+    "Kandla": {
+        "risk": "low",
+        "detail": "Clear skies with moderate temperatures — Kandla port (Deendayal Port) operating normally",
+        "temp_c": 36,
         "condition": "Clear",
+    },
+    "Tuticorin": {
+        "risk": "low",
+        "detail": "Warm and dry conditions — V.O. Chidambaranar Port operating at full capacity",
+        "temp_c": 32,
+        "condition": "Clear",
+    },
+    "New Mangalore": {
+        "risk": "medium",
+        "detail": "Monsoon showers along Karnataka coast — minor delays in bulk cargo handling at New Mangalore port",
+        "temp_c": 27,
+        "condition": "Light Rain",
+    },
+    "Paradip": {
+        "risk": "medium",
+        "detail": "Bay of Bengal low-pressure system — rough seas causing minor delays for vessel anchorage at Paradip port",
+        "temp_c": 30,
+        "condition": "Overcast",
     },
 }
 
@@ -92,75 +92,75 @@ WEATHER_DATA: dict[str, dict] = {
 # ── Mock Disruption Events (port strikes, congestion, etc.) ─────────
 
 DISRUPTION_DATA: dict[str, dict] = {
-    "Shanghai": {
+    "Nhava Sheva (JNPT)": {
         "active": True,
         "type": "Port Congestion",
-        "detail": "Severe container backlog — 45+ vessels anchored waiting for berth, avg wait time 4 days",
+        "detail": "Severe container backlog at JNPT — 30+ vessels anchored waiting for berth, avg wait time 3 days due to monsoon & volume surge",
         "severity": "high",
-        "extra_delay_days": 4.0,
+        "extra_delay_days": 3.0,
     },
-    "Singapore": {
-        "active": False,
-        "type": "None",
-        "detail": "No active disruptions — port operating normally at 92% capacity",
-        "severity": "low",
-        "extra_delay_days": 0.0,
-    },
-    "Mumbai": {
+    "Chennai": {
         "active": True,
         "type": "Customs Delay",
-        "detail": "New customs inspection mandate — 100% container scanning causing 2-day processing backlog",
+        "detail": "New customs inspection mandate at Chennai port — 100% container scanning causing 2-day processing backlog",
         "severity": "medium",
         "extra_delay_days": 2.0,
     },
-    "Dubai": {
+    "Kochi": {
         "active": False,
         "type": "None",
-        "detail": "No active disruptions — Jebel Ali port runs ahead of schedule",
+        "detail": "No active disruptions — Cochin port operating at 85% capacity with normal turnaround times",
         "severity": "low",
         "extra_delay_days": 0.0,
     },
-    "Rotterdam": {
+    "Visakhapatnam": {
         "active": True,
-        "type": "Port Strike",
-        "detail": "Dockworkers' union strike over automation — terminal operations halted for estimated 5 days",
+        "type": "Port Closure",
+        "detail": "Cyclone-related port closure — all vessel movements suspended at Visakhapatnam, expected reopening in 2 days",
         "severity": "high",
-        "extra_delay_days": 5.0,
+        "extra_delay_days": 4.0,
     },
-    "Los Angeles": {
-        "active": True,
-        "type": "Port Congestion",
-        "detail": "Supply chain surge — 30+ container ships queued offshore, 3-day average berthing delay",
-        "severity": "medium",
-        "extra_delay_days": 3.0,
+    "Mundra": {
+        "active": False,
+        "type": "None",
+        "detail": "No active disruptions — Adani Mundra port running ahead of schedule with excellent throughput",
+        "severity": "low",
+        "extra_delay_days": 0.0,
     },
-    "Colombo": {
+    "Kolkata (Haldia)": {
         "active": True,
-        "type": "Equipment Shortage",
-        "detail": "Crane maintenance backlog — only 60% gantry cranes operational, slower cargo handling",
+        "type": "Draft Restriction",
+        "detail": "Hooghly river silting — draft limited to 8m, larger vessels diverted, 1.5-day avg delay at Haldia dock",
         "severity": "medium",
         "extra_delay_days": 1.5,
     },
-    "Tokyo": {
-        "active": False,
-        "type": "None",
-        "detail": "No active disruptions — Yokohama and Tokyo Bay ports operating at full efficiency",
-        "severity": "low",
-        "extra_delay_days": 0.0,
-    },
-    "Hamburg": {
+    "Kandla": {
         "active": True,
-        "type": "Port Strike",
-        "detail": "Labor dispute at Eurogate terminal — partial shutdown, only 2 of 4 terminals accepting cargo",
-        "severity": "high",
-        "extra_delay_days": 3.5,
+        "type": "Equipment Shortage",
+        "detail": "Crane maintenance backlog at Deendayal Port — only 60% gantry cranes operational, slower cargo handling",
+        "severity": "medium",
+        "extra_delay_days": 1.5,
     },
-    "Sydney": {
+    "Tuticorin": {
         "active": False,
         "type": "None",
-        "detail": "No active disruptions — Port Botany operating smoothly",
+        "detail": "No active disruptions — V.O. Chidambaranar Port operating smoothly with normal throughput",
         "severity": "low",
         "extra_delay_days": 0.0,
+    },
+    "New Mangalore": {
+        "active": False,
+        "type": "None",
+        "detail": "No active disruptions — New Mangalore port operations normal, no congestion",
+        "severity": "low",
+        "extra_delay_days": 0.0,
+    },
+    "Paradip": {
+        "active": True,
+        "type": "Port Congestion",
+        "detail": "Bulk cargo surge at Paradip port — coal and iron ore exports causing berthing delays of 2+ days",
+        "severity": "medium",
+        "extra_delay_days": 2.0,
     },
 }
 
