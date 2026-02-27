@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agents.pipeline import run_agent_pipeline
 from services.mock_data import LOCATIONS, LOCATION_NAMES, get_location_info
+from services.tavily_client import fetch_realtime_disruptions, fetch_realtime_weather
 
 # ── FastAPI App ───────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ class RunAgentsRequest(BaseModel):
     origin: str
     destination: str
     stops: list[RouteStop]
+    mode: str = "simulation"  # "simulation" or "realtime"
 
 
 class ExecutePlanRequest(BaseModel):
@@ -69,14 +71,28 @@ def status():
 
 
 @app.get("/locations")
-def get_locations():
+def get_locations(mode: str = "simulation"):
     """Return all available shipping locations with weather & disruption data."""
-    return {
-        "locations": [
-            {**loc, **get_location_info(loc["name"])}
-            for loc in LOCATIONS
-        ]
-    }
+    if mode == "realtime":
+        locations = []
+        for loc in LOCATIONS:
+            weather = fetch_realtime_weather(loc["name"], loc["country"])
+            disruption = fetch_realtime_disruptions(loc["name"], loc["country"])
+            locations.append({
+                **loc,
+                "location": loc["name"],
+                "weather": weather,
+                "disruption": disruption,
+            })
+        return {"locations": locations, "mode": "realtime"}
+    else:
+        return {
+            "locations": [
+                {**loc, **get_location_info(loc["name"])}
+                for loc in LOCATIONS
+            ],
+            "mode": "simulation",
+        }
 
 
 @app.post("/run-agents")
@@ -93,8 +109,9 @@ def run_agents(request: RunAgentsRequest):
             origin=request.origin,
             destination=request.destination,
             stops=[s.model_dump() for s in request.stops],
+            mode=request.mode,
         )
-        return {"success": True, "data": result}
+        return {"success": True, "data": result, "mode": request.mode}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
