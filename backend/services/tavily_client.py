@@ -177,8 +177,7 @@ def fetch_realtime_weather(location: str, country: str = "") -> dict:
     location_str = f"{location}, {country}" if country else location
 
     query = (
-        f"current weather conditions and port operations impact "
-        f"at {location_str} port today February 2026"
+        f"at {location_str}   port India disruption shipping delay"
     )
 
     try:
