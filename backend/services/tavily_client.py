@@ -88,12 +88,12 @@ def fetch_realtime_disruptions(location: str, country: str = "") -> dict:
             "sources": [list of source URLs]
         }
     """
-    location_str = f"{location}, {country}" if country else location
+    location_str = f"{location} port India"
 
     query = (
-        f"port disruption OR strike OR political crisis OR war OR conflict "
-        f"OR shipping delay OR supply chain disruption at {location_str} port "
-        f"in the last 7 days 2026"
+        f"{location_str} port India disruption OR strike OR political crisis OR war "
+        f"OR shipping delay OR supply chain issue OR congestion "
+        f"latest news 2026"
     )
 
     try:
@@ -103,6 +103,9 @@ def fetch_realtime_disruptions(location: str, country: str = "") -> dict:
             search_depth="advanced",
             max_results=5,
             include_answer=True,
+            include_domains=["economictimes.indiatimes.com", "livemint.com", "business-standard.com",
+                             "thehindu.com", "ndtv.com", "maritimegateway.com", "porttechnology.org",
+                             "reuters.com", "hindustantimes.com", "indianexpress.com"],
         )
 
         answer = response.get("answer", "")
@@ -174,10 +177,11 @@ def fetch_realtime_weather(location: str, country: str = "") -> dict:
             "source": "realtime",
         }
     """
-    location_str = f"{location}, {country}" if country else location
+    location_str = f"{location} port India"
 
     query = (
-        f"at {location_str}   port India disruption shipping delay"
+        f"{location} port India current weather conditions impact on shipping "
+        f"OR port operations OR sea conditions latest 2026"
     )
 
     try:
@@ -187,6 +191,9 @@ def fetch_realtime_weather(location: str, country: str = "") -> dict:
             search_depth="basic",
             max_results=3,
             include_answer=True,
+            include_domains=["economictimes.indiatimes.com", "livemint.com", "thehindu.com",
+                             "ndtv.com", "weather.com", "accuweather.com", "maritimegateway.com",
+                             "reuters.com", "imd.gov.in"],
         )
 
         answer = response.get("answer", "")
