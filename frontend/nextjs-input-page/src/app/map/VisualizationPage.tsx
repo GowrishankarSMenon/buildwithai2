@@ -42,7 +42,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { LocationNode, RouteSubmission, OperatingMode } from "./page";
 import { LOCATIONS } from "./page";
-import BlueprintRouteViewer from "./BlueprintRouteViewer";
+import BlueprintRouteViewer, { 
+    RouteData, 
+    RouteNodeData, 
+    SegmentData,
+    TransportNode 
+} from "./BlueprintRouteViewer";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -121,6 +126,39 @@ export default function VisualizationPage({ data, onBack }: Props) {
     const [routesLoading, setRoutesLoading] = useState(true);
     const [routesError, setRoutesError] = useState<string | null>(null);
 
+    // ── Transport Nodes & Route Selection State ──
+    const [availableNodes, setAvailableNodes] = useState<TransportNode[]>([]);
+    const [selectedRoute, setSelectedRoute] = useState<RouteData | null>(null);
+
+    // Fetch available transport nodes on mount
+    useEffect(() => {
+        const fetchNodes = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/transport-nodes`);
+                if (res.ok) {
+                    const json = await res.json();
+                    // Transform to TransportNode format - API returns { nodes: [...] }
+                    const nodes: TransportNode[] = (json.nodes || []).map((n: any) => ({
+                        id: n.id,
+                        name: n.name,
+                        city: n.city,
+                        state: n.state,
+                        lat: n.lat,
+                        lng: n.lng,
+                        node_type: n.type as "port" | "airport",
+                        subtype: n.subtype || "",
+                        code: n.code || "",
+                    }));
+                    setAvailableNodes(nodes);
+                    console.log("Loaded transport nodes:", nodes.length);
+                }
+            } catch (err) {
+                console.warn("Failed to fetch transport nodes:", err);
+            }
+        };
+        fetchNodes();
+    }, []);
+
     // Fetch planned routes on mount
     useEffect(() => {
         const fetchRoutes = async () => {
@@ -151,43 +189,44 @@ export default function VisualizationPage({ data, onBack }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Build route nodes from the best planned route for the map
+    // Build route nodes from selected route (or best route) for the map
     const routeNodes: LocationNode[] = useMemo(() => {
-        if (plannedRoutes.length > 0) {
-            const best = plannedRoutes[0];
+        // Use selected route if available, otherwise use best route
+        const routeToUse = selectedRoute || (plannedRoutes.length > 0 ? plannedRoutes[0] : null);
+        
+        if (routeToUse && routeToUse.segments?.length > 0) {
             const nodes: LocationNode[] = [];
-            if (best.segments?.length > 0) {
+            nodes.push({
+                id: routeToUse.segments[0].from.node_id,
+                name: routeToUse.segments[0].from.name,
+                country: "India",
+                type: routeToUse.segments[0].from.node_type === "airport" ? "airport" : "port",
+                lat: routeToUse.segments[0].from.lat,
+                lng: routeToUse.segments[0].from.lng,
+            });
+            for (const seg of routeToUse.segments) {
                 nodes.push({
-                    id: best.segments[0].from.node_id,
-                    name: best.segments[0].from.name,
+                    id: seg.to.node_id,
+                    name: seg.to.name,
                     country: "India",
-                    type: best.segments[0].from.node_type === "airport" ? "airport" : "port",
-                    lat: best.segments[0].from.lat,
-                    lng: best.segments[0].from.lng,
+                    type: seg.to.node_type === "airport" ? "airport" : "port",
+                    lat: seg.to.lat,
+                    lng: seg.to.lng,
                 });
-                for (const seg of best.segments) {
-                    nodes.push({
-                        id: seg.to.node_id,
-                        name: seg.to.name,
-                        country: "India",
-                        type: seg.to.node_type === "airport" ? "airport" : "port",
-                        lat: seg.to.lat,
-                        lng: seg.to.lng,
-                    });
-                }
             }
             return nodes.length > 0 ? nodes : [origin, ...stops, destination];
         }
         return [origin, ...stops, destination];
-    }, [plannedRoutes, origin, stops, destination]);
+    }, [plannedRoutes, selectedRoute, origin, stops, destination]);
 
-    // Segment transport modes from best route
+    // Segment transport modes from selected/best route
     const segmentModes: string[] = useMemo(() => {
-        if (plannedRoutes.length > 0 && plannedRoutes[0].segments) {
-            return plannedRoutes[0].segments.map((s: any) => s.transport_mode);
+        const routeToUse = selectedRoute || (plannedRoutes.length > 0 ? plannedRoutes[0] : null);
+        if (routeToUse && routeToUse.segments) {
+            return routeToUse.segments.map((s: any) => s.transport_mode);
         }
         return [];
-    }, [plannedRoutes]);
+    }, [plannedRoutes, selectedRoute]);
 
     // Determine transport mode based on any airport in route
     const mode: "sea" | "air" = useMemo(() => {
@@ -221,6 +260,149 @@ export default function VisualizationPage({ data, onBack }: Props) {
         alt[disIdx] = sorted[0];
         return alt;
     }, [routeNodes, disruption]);
+
+    // ── Route Selection & Custom Route Handlers ──
+    const handleRouteSelect = (route: RouteData) => {
+        setSelectedRoute(route);
+    };
+
+    const handleCustomRouteRequest = async (
+        fromNode: RouteNodeData,
+        selectedStop: TransportNode,
+        toNode: RouteNodeData
+    ) => {
+        // INSERT the selected stop between fromNode and toNode in the first (best) route
+        // This modifies the existing route rather than creating a new one
+        try {
+            setRoutesLoading(true);
+            
+            // Find the first route (best route) and the segment to split
+            const bestRoute = plannedRoutes[0];
+            if (!bestRoute || !bestRoute.segments) {
+                throw new Error("No route available to modify");
+            }
+            
+            // Find the index of the segment that goes from fromNode to toNode
+            const segmentIndex = bestRoute.segments.findIndex(
+                (seg: SegmentData) => 
+                    seg.from.node_id === fromNode.node_id && 
+                    seg.to.node_id === toNode.node_id
+            );
+            
+            if (segmentIndex === -1) {
+                throw new Error("Could not find segment to split");
+            }
+            
+            const originalSegment = bestRoute.segments[segmentIndex];
+            
+            // Create the new intermediate node data
+            const newNode: RouteNodeData = {
+                node_id: selectedStop.id,
+                name: selectedStop.name,
+                city: selectedStop.city,
+                state: selectedStop.state,
+                lat: selectedStop.lat,
+                lng: selectedStop.lng,
+                node_type: selectedStop.node_type,
+                subtype: selectedStop.subtype,
+                code: selectedStop.code,
+            };
+            
+            // Calculate distances for proportional cost/time split
+            const calcDistance = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+                const R = 6371; // km
+                const dLat = (b.lat - a.lat) * Math.PI / 180;
+                const dLng = (b.lng - a.lng) * Math.PI / 180;
+                const lat1 = a.lat * Math.PI / 180;
+                const lat2 = b.lat * Math.PI / 180;
+                const aa = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+                return R * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
+            };
+            
+            const dist1 = calcDistance(fromNode, newNode);
+            const dist2 = calcDistance(newNode, toNode);
+            const totalNewDist = dist1 + dist2;
+            const ratio1 = totalNewDist > 0 ? dist1 / totalNewDist : 0.5;
+            const ratio2 = 1 - ratio1;
+            
+            // Create two new segments that replace the original
+            const segment1: SegmentData = {
+                from: originalSegment.from,
+                to: newNode,
+                transport_mode: originalSegment.transport_mode,
+                distance_km: dist1,
+                cost_usd: originalSegment.cost_usd * ratio1,
+                time_hours: originalSegment.time_hours * ratio1,
+                cumulative_cost: segmentIndex === 0 
+                    ? originalSegment.cost_usd * ratio1 
+                    : bestRoute.segments[segmentIndex - 1].cumulative_cost + originalSegment.cost_usd * ratio1,
+                cumulative_time_hours: segmentIndex === 0 
+                    ? originalSegment.time_hours * ratio1 
+                    : bestRoute.segments[segmentIndex - 1].cumulative_time_hours + originalSegment.time_hours * ratio1,
+            };
+            
+            const segment2: SegmentData = {
+                from: newNode,
+                to: originalSegment.to,
+                transport_mode: originalSegment.transport_mode,
+                distance_km: dist2,
+                cost_usd: originalSegment.cost_usd * ratio2,
+                time_hours: originalSegment.time_hours * ratio2,
+                cumulative_cost: segment1.cumulative_cost + originalSegment.cost_usd * ratio2,
+                cumulative_time_hours: segment1.cumulative_time_hours + originalSegment.time_hours * ratio2,
+            };
+            
+            // Build the new segments array with the insertion
+            const newSegments: SegmentData[] = [
+                ...bestRoute.segments.slice(0, segmentIndex),
+                segment1,
+                segment2,
+                ...bestRoute.segments.slice(segmentIndex + 1).map((seg: SegmentData, i: number) => ({
+                    ...seg,
+                    // Adjust cumulative values for segments after insertion
+                    cumulative_cost: segment2.cumulative_cost + (
+                        i === 0 ? seg.cost_usd : bestRoute.segments[segmentIndex + 1 + i - 1].cost_usd + seg.cost_usd
+                    ),
+                    cumulative_time_hours: segment2.cumulative_time_hours + (
+                        i === 0 ? seg.time_hours : bestRoute.segments[segmentIndex + 1 + i - 1].time_hours + seg.time_hours
+                    ),
+                })),
+            ];
+            
+            // Recalculate cumulative values for all segments after insertion
+            let cumulativeCost = 0;
+            let cumulativeTime = 0;
+            for (const seg of newSegments) {
+                cumulativeCost += seg.cost_usd;
+                cumulativeTime += seg.time_hours;
+                seg.cumulative_cost = cumulativeCost;
+                seg.cumulative_time_hours = cumulativeTime;
+            }
+            
+            // Create updated route with new segments
+            const updatedRoute = {
+                ...bestRoute,
+                segments: newSegments,
+                node_count: newSegments.length + 1,
+                total_distance_km: newSegments.reduce((sum: number, s: SegmentData) => sum + s.distance_km, 0),
+                total_cost: cumulativeCost,
+                total_time_hours: cumulativeTime,
+                label: `${bestRoute.label} +${selectedStop.city}`,
+            };
+            
+            // Update the routes state - replace the first route with modified version
+            setPlannedRoutes((prev) => [updatedRoute, ...prev.slice(1)]);
+            setSelectedRoute(updatedRoute);
+            
+            console.log(`[Route] Inserted ${selectedStop.city} between ${fromNode.city} and ${toNode.city}`);
+            
+        } catch (err) {
+            console.error("Failed to insert stop into route:", err);
+            setRoutesError(err instanceof Error ? err.message : "Failed to insert stop");
+        } finally {
+            setRoutesLoading(false);
+        }
+    };
 
     // Detail panel state
     const [panelOpen, setPanelOpen] = useState(true);
@@ -632,7 +814,13 @@ export default function VisualizationPage({ data, onBack }: Props) {
 
                     {/* ── Blueprint Route Viewer ── */}
                     <div className="viz-blueprint-section">
-                        <BlueprintRouteViewer routes={plannedRoutes} loading={routesLoading} />
+                        <BlueprintRouteViewer 
+                            routes={plannedRoutes} 
+                            loading={routesLoading}
+                            availableNodes={availableNodes}
+                            onRouteSelect={handleRouteSelect}
+                            onCustomRouteRequest={handleCustomRouteRequest}
+                        />
                         {routesError && (
                             <div className="viz-alert viz-alert--red" style={{ marginTop: 10 }}>
                                 <div className="viz-alert__title">Route Planning Error</div>
