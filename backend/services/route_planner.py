@@ -39,6 +39,12 @@ INTERMODAL_HOURS = 12.0       # half-day transfer
 PORT_HANDLING_HR = 6.0        # hours dwell at each sea port
 AIRPORT_HANDLING_HR = 3.0     # hours dwell at each airport
 
+# ── Sea Preference Weighting ──────────────────────────────────────────
+# During pathfinding, air costs are penalised so the optimizer strongly
+# favours cheaper sea routes.  Actual reported costs remain accurate.
+AIR_PENALTY_FACTOR = 3.0      # multiply air cost by this during ranking
+SEA_DISCOUNT_FACTOR = 0.6     # multiply sea cost by this during ranking
+
 
 @dataclass
 class RouteNode:
@@ -148,19 +154,23 @@ def _segment_cost(n1: dict, n2: dict) -> tuple[str, float, float, float]:
 
 
 def _resolve_city_nodes(city_name: str, state: str | None = None) -> list[dict]:
-    """Get all transport nodes in a city. Falls back to nearest nodes."""
+    """Get transport nodes in a city — **ports only** for cost-optimal sea routing.
+    Airports are only included as a last resort if a city has zero ports.
+    """
     result = find_nodes_in_city(city_name, state)
-    nodes = []
-    for p in result["ports"]:
-        nodes.append(p)
-    for a in result["airports"]:
-        nodes.append(a)
+    ports = list(result["ports"])
+    airports = list(result["airports"])
+
+    # Use ONLY ports when available — this forces sea routes
+    nodes = ports if ports else airports
 
     if not nodes:
-        # Fallback: search by partial match in all nodes
+        # Fallback: search by partial match in all nodes, ports only
         all_nodes = get_all_nodes()
         q = city_name.lower()
-        nodes = [n for n in all_nodes if q in n["city"].lower() or q in n["name"].lower() or q in n["state"].lower()]
+        matched = [n for n in all_nodes if q in n["city"].lower() or q in n["name"].lower() or q in n["state"].lower()]
+        port_matches = [n for n in matched if n["type"] == "port"]
+        nodes = port_matches if port_matches else matched
 
     return nodes[:10]  # cap at 10 to keep graph manageable
 
@@ -262,7 +272,17 @@ def compute_routes(
             mode, cost, time_h, dist = _segment_cost(current_node, tgt)
             candidates.append((cost, tgt, mode, time_h, dist))
 
-        candidates.sort(key=lambda x: x[0])
+        # Sort by *weighted* cost: penalise air, discount sea —
+        # so the optimizer strongly prefers cheaper sea routes.
+        def _weighted(c):
+            raw_cost, _tgt, m, _t, _d = c
+            if m == "sea":
+                return raw_cost * SEA_DISCOUNT_FACTOR
+            if m == "air":
+                return raw_cost * AIR_PENALTY_FACTOR
+            return raw_cost  # intermodal unchanged
+
+        candidates.sort(key=_weighted)
 
         for cost, tgt, mode, time_h, dist in candidates[:3]:  # limit branching
             from_rn = RouteNode(
@@ -297,8 +317,15 @@ def compute_routes(
 
     _build_routes_recursive(0, None, [], 0.0, 0.0, 0.0, set())
 
-    # Sort by total cost and pick top N
-    all_routes.sort(key=lambda r: r.total_cost)
+    # Sort by total cost with a preference for routes using more sea segments.
+    # Sea-heavy routes get a discount in the sort key so they rank higher
+    # at similar cost levels.
+    def _route_sort_key(r: PlannedRoute) -> float:
+        sea_ratio = sum(1 for s in r.segments if s.transport_mode == "sea") / max(len(r.segments), 1)
+        # Apply up to 20% discount for a fully-sea route in the ranking
+        return r.total_cost * (1.0 - 0.20 * sea_ratio)
+
+    all_routes.sort(key=_route_sort_key)
 
     # Deduplicate routes that use exactly the same node sequence
     seen_sequences: set[str] = set()

@@ -12,7 +12,6 @@ Sign up at https://openweathermap.org/api (free tier available).
 import os
 import requests
 from dotenv import load_dotenv
-from services.mock_data import LOCATIONS
 
 # Load .env from backend directory
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -29,10 +28,7 @@ def _get_api_key() -> str:
 
 
 def _get_coords_for_location(location: str) -> tuple[float, float] | None:
-    """Look up lat/lng for a location from the LOCATIONS list."""
-    for loc in LOCATIONS:
-        if loc["name"].lower() == location.lower():
-            return loc["lat"], loc["lng"]
+    """No hardcoded coordinate lookup — we use city-name geocoding via the API."""
     return None
 
 

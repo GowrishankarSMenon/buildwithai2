@@ -228,10 +228,16 @@ export default function VisualizationPage({ data, onBack }: Props) {
         return [];
     }, [plannedRoutes, selectedRoute]);
 
-    // Determine transport mode based on any airport in route
+    // Determine transport mode from majority of segment modes (cost-optimal = sea)
     const mode: "sea" | "air" = useMemo(() => {
-        return routeNodes.some((n) => n.type === "airport") ? "air" : "sea";
-    }, [routeNodes]);
+        if (segmentModes.length > 0) {
+            const seaCount = segmentModes.filter((m) => m === "sea").length;
+            return seaCount >= segmentModes.length / 2 ? "sea" : "air";
+        }
+        // Fallback: if most nodes are ports, it's sea
+        const portCount = routeNodes.filter((n) => n.type === "port").length;
+        return portCount >= routeNodes.length / 2 ? "sea" : "air";
+    }, [routeNodes, segmentModes]);
 
     // Current position index (for calculating position on route)
     const currentIdx = useMemo(() => {
@@ -414,22 +420,45 @@ export default function VisualizationPage({ data, onBack }: Props) {
     const [agentError, setAgentError] = useState<string | null>(null);
     const [executionResult, setExecutionResult] = useState<string | null>(null);
 
-    // Call agent pipeline on mount
+    // ── Disrupted Port Selection ──
+    // In simulation mode, let the user pick which port gets the disruption
+    const [disruptedPortIdx, setDisruptedPortIdx] = useState<number>(-1);
+
+    // Auto-select a middle port once route nodes are available (simulation + disruption present)
     useEffect(() => {
+        if (disruption && operatingMode === "simulation" && routeNodes.length > 2 && disruptedPortIdx === -1) {
+            // Default: pick the first intermediate stop (index 1)
+            setDisruptedPortIdx(1);
+        }
+    }, [routeNodes, disruption, operatingMode, disruptedPortIdx]);
+
+    // Call agent pipeline AFTER routes are loaded (so we have real route nodes)
+    useEffect(() => {
+        if (routesLoading || routeNodes.length < 2) return;
+
         const runPipeline = async () => {
             setAgentLoading(true);
             setAgentError(null);
             try {
+                // Build stops from the actual planned route nodes (skip origin = index 0)
+                const intermediateNodes = routeNodes.slice(1); // includes destination
+                const agentStops = intermediateNodes.map((node, i) => {
+                    const isDisrupted = disruption && operatingMode === "simulation" && (i + 1) === disruptedPortIdx;
+                    return {
+                        stop_name: node.name,
+                        eta_days: 2.0,
+                        delay_days: isDisrupted ? 3.0 : 0.0,
+                    };
+                });
+
                 const payload = {
                     product_id: "P1",
-                    origin: origin.name,
-                    destination: destination.name,
-                    stops: stops.map((s) => ({
-                        stop_name: s.name,
-                        eta_days: 2.0,
-                        delay_days: disruption && s.id === disruption.node.id ? 3.0 : 0.0,
-                    })),
+                    origin: routeNodes[0].name,
+                    destination: routeNodes[routeNodes.length - 1].name,
+                    stops: agentStops,
                     mode: operatingMode,
+                    disruption_type: disruption?.type || "",
+                    disruption_description: disruption?.description || "",
                 };
                 const res = await fetch(`${API_BASE}/run-agents`, {
                     method: "POST",
@@ -446,7 +475,8 @@ export default function VisualizationPage({ data, onBack }: Props) {
             }
         };
         runPipeline();
-    }, [origin, destination, stops, disruption, operatingMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [routesLoading, routeNodes, disruptedPortIdx]);
 
     // Execute chosen plan
     const handleExecutePlan = async (optionName: string) => {
@@ -706,6 +736,44 @@ export default function VisualizationPage({ data, onBack }: Props) {
                             {currentPosition && <div className="viz-details__row"><span>Current</span><span>{currentPosition.name}</span></div>}
                         </div>
                     </div>
+
+                    {/* ── Disruption Port Selector (Simulation only) ── */}
+                    {operatingMode === "simulation" && disruption && routeNodes.length > 2 && (
+                        <div className="viz-section">
+                            <h4 className="viz-section__title"><AlertTriangle size={14} /> Disrupted Port</h4>
+                            <div className="viz-alert viz-alert--red" style={{ padding: "10px 12px" }}>
+                                <div className="viz-alert__title" style={{ marginBottom: 6 }}>
+                                    {disruption.type}: {disruption.description || "No description"}
+                                </div>
+                                <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: 4 }}>
+                                    Apply disruption to:
+                                </label>
+                                <select
+                                    value={disruptedPortIdx}
+                                    onChange={(e) => {
+                                        setDisruptedPortIdx(Number(e.target.value));
+                                        setAgentResult(null);
+                                    }}
+                                    style={{
+                                        width: "100%",
+                                        padding: "6px 8px",
+                                        borderRadius: 6,
+                                        border: "1px solid rgba(255,255,255,0.15)",
+                                        background: "rgba(0,0,0,0.3)",
+                                        color: "#e2e8f0",
+                                        fontSize: "0.8rem",
+                                    }}
+                                >
+                                    <option value={-1}>No disruption</option>
+                                    {routeNodes.slice(1, -1).map((node, i) => (
+                                        <option key={node.id} value={i + 1}>
+                                            {node.name} (Stop {i + 1})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── Agent Pipeline Results ── */}
                     <div className="viz-section">

@@ -51,6 +51,8 @@ def run_agent_pipeline(
     destination: str,
     stops: list[dict],
     mode: str = "simulation",
+    disruption_type: str = "",
+    disruption_description: str = "",
 ) -> dict:
     """
     Run the full agent pipeline: monitor → risk → plan → decision.
@@ -80,6 +82,8 @@ def run_agent_pipeline(
         destination=destination,
         stops=stops,
         mode=mode,
+        disruption_type=disruption_type,
+        disruption_description=disruption_description,
     )
 
     _log_output("total_eta", f"{monitoring.total_eta} days")

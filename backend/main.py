@@ -16,7 +16,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agents.pipeline import run_agent_pipeline
-from services.mock_data import LOCATIONS, LOCATION_NAMES, get_location_info
 from services.db_service import get_all_nodes, get_unique_cities, search_cities, find_nodes_in_city
 from services.route_planner import compute_routes
 
@@ -54,6 +53,8 @@ class RunAgentsRequest(BaseModel):
     destination: str
     stops: list[RouteStop]
     mode: str = "simulation"  # "simulation" or "realtime"
+    disruption_type: str = ""  # e.g. "Port Strike", from UI
+    disruption_description: str = ""  # free-text description from UI
 
 
 class ExecutePlanRequest(BaseModel):
@@ -71,38 +72,6 @@ def status():
     return {"status": "running", "service": "Agentic Disruption Shield"}
 
 
-@app.get("/locations")
-def get_locations(mode: str = "simulation"):
-    """
-    Return all available shipping locations with weather & disruption data.
-    In realtime mode, we only return basic location info here — Tavily is called
-    per-port during the agent pipeline (run-agents) to avoid unnecessary API calls.
-    """
-    if mode == "realtime":
-        # Return locations with basic metadata only; Tavily is invoked
-        # during the agent pipeline for the ports the user actually selects.
-        return {
-            "locations": [
-                {
-                    **loc,
-                    "location": loc["name"],
-                    "weather": {"risk": "unknown", "detail": "Run agent pipeline for live data", "condition": "Pending"},
-                    "disruption": {"active": False, "type": "Pending", "detail": "Run agent pipeline for live data", "severity": "low", "extra_delay_days": 0.0},
-                }
-                for loc in LOCATIONS
-            ],
-            "mode": "realtime",
-        }
-    else:
-        return {
-            "locations": [
-                {**loc, **get_location_info(loc["name"])}
-                for loc in LOCATIONS
-            ],
-            "mode": "simulation",
-        }
-
-
 @app.post("/run-agents")
 def run_agents(request: RunAgentsRequest):
     """
@@ -118,6 +87,8 @@ def run_agents(request: RunAgentsRequest):
             destination=request.destination,
             stops=[s.model_dump() for s in request.stops],
             mode=request.mode,
+            disruption_type=request.disruption_type,
+            disruption_description=request.disruption_description,
         )
         return {"success": True, "data": result, "mode": request.mode}
     except Exception as e:

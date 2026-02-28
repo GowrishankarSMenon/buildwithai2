@@ -207,8 +207,8 @@ export default function MapPage() {
             destination: destNode,
             stops: [],
             currentPosition: null,
-            disruption: mode === "simulation" && disruptionDesc
-                ? { node: originNode, type: disruptionType, description: disruptionDesc }
+            disruption: mode === "simulation" && disruptionType && disruptionType !== "None"
+                ? { node: originNode, type: disruptionType, description: disruptionDesc || `${disruptionType} reported on route` }
                 : null,
             mode,
             sourceCity: sourceCity.trim(),
@@ -326,6 +326,7 @@ export default function MapPage() {
                                     <div className="lp-field">
                                         <label className="lp-field__label">Disruption Type</label>
                                         <select className="lp-field__select" value={disruptionType} onChange={(e) => setDisruptionType(e.target.value)}>
+                                            <option>None</option>
                                             <option>Port Strike</option>
                                             <option>Severe Weather</option>
                                             <option>Port Congestion</option>

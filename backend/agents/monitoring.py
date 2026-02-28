@@ -13,10 +13,11 @@ The agent processes raw route data and produces a structured
 monitoring report that feeds into the risk assessment pipeline.
 """
 
+import random
+
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from services.groq_client import get_llm
-from services.mock_data import get_weather, get_disruption, LOCATIONS
 from services.tavily_client import fetch_realtime_disruptions
 from services.weather_client import fetch_realtime_weather
 
@@ -53,28 +54,75 @@ class MonitoringResult(BaseModel):
 # ── Weather & Disruption Data Lookup ─────────────────────────────────
 
 def _get_country_for_location(location: str) -> str:
-    """Get country name for a location from the LOCATIONS list."""
-    for loc in LOCATIONS:
-        if loc["name"].lower() == location.lower():
-            return loc["country"]
-    return ""
+    """Return country for a location. All ports in this system are Indian."""
+    return "India"
 
 
-def _get_location_risks(location: str, mode: str = "simulation") -> tuple[str, str, str, str, bool, float]:
+# ── Simulation: random weather generator ─────────────────────────────
+
+_WEATHER_CONDITIONS = [
+    ("low",    "Clear skies, calm seas — no weather-related delays expected",   "Clear"),
+    ("low",    "Partly cloudy with light breeze — normal port operations",      "Partly Cloudy"),
+    ("medium", "Moderate rainfall — minor delays possible in cargo handling",   "Rain"),
+    ("medium", "Fog reducing visibility — slower vessel approach",             "Fog"),
+    ("high",   "Heavy monsoon rainfall — waterlogging and reduced operations", "Heavy Rain"),
+    ("high",   "Cyclone warning — port on high alert, vessel movements may be restricted", "Cyclone Warning"),
+]
+
+
+def _random_weather() -> dict:
+    """Generate a random weather condition for simulation mode."""
+    risk, detail, condition = random.choice(_WEATHER_CONDITIONS)
+    return {"risk": risk, "detail": detail, "condition": condition}
+
+
+def _get_location_risks(
+    location: str,
+    mode: str = "simulation",
+    disruption_type: str = "",
+    disruption_description: str = "",
+    has_disruption: bool = False,
+) -> tuple[str, str, str, str, bool, float]:
     """
     Get weather risk and disruption data for a location.
-    Mode: "simulation" uses mock data, "realtime" uses Tavily API.
-    Returns: (weather_risk, weather_detail, disruption_type, disruption_detail, disruption_active, extra_delay_days)
 
-    Tavily is only invoked for ports the user has selected in their route.
+    Simulation mode:
+      - Weather: randomly generated (no hardcoded mock_data.py)
+      - Disruption: uses the type & description entered by the user on the UI
+        with a random delay of 2-6 days.  Segments without a user-injected
+        disruption are treated as clean.
+
+    Realtime mode:
+      - Weather: OpenWeatherMap API
+      - Disruption: Tavily web-search API
+
+    Returns: (weather_risk, weather_detail, disruption_type, disruption_detail,
+              disruption_active, extra_delay_days)
     """
     if mode == "realtime":
         country = _get_country_for_location(location)
         weather = fetch_realtime_weather(location, country)
         disruption = fetch_realtime_disruptions(location, country)
     else:
-        weather = get_weather(location)
-        disruption = get_disruption(location)
+        # ── Simulation: random weather ──
+        weather = _random_weather()
+
+        # ── Simulation: use UI-provided disruption data ──
+        if has_disruption and disruption_type:
+            extra_delay = float(random.randint(2, 6))
+            disruption = {
+                "type": disruption_type,
+                "detail": disruption_description or f"{disruption_type} reported at {location}",
+                "active": True,
+                "extra_delay_days": extra_delay,
+            }
+        else:
+            disruption = {
+                "type": "None",
+                "detail": f"No disruptions at {location}",
+                "active": False,
+                "extra_delay_days": 0.0,
+            }
 
     return (
         weather["risk"],
@@ -94,6 +142,8 @@ def run_monitoring_agent(
     destination: str,
     stops: list[dict],
     mode: str = "simulation",
+    disruption_type: str = "",
+    disruption_description: str = "",
 ) -> MonitoringResult:
     """
     Run the Monitoring Agent on shipment route data.
@@ -104,6 +154,8 @@ def run_monitoring_agent(
         destination: Final destination
         stops: List of dicts with keys: stop_name, eta_days, delay_days
         mode: "simulation" for mock data, "realtime" for Tavily live data
+        disruption_type: User-selected disruption type from the UI (simulation)
+        disruption_description: User-entered disruption description (simulation)
 
     Returns:
         MonitoringResult with segment-level and aggregated data
@@ -114,7 +166,14 @@ def run_monitoring_agent(
     prev_location = origin
 
     for stop in stops:
-        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active, extra_delay = _get_location_risks(stop["stop_name"], mode)
+        # A stop has a UI-injected disruption if delay_days > 0
+        stop_has_disruption = stop.get("delay_days", 0) > 0
+        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active, extra_delay = _get_location_risks(
+            stop["stop_name"], mode,
+            disruption_type=disruption_type,
+            disruption_description=disruption_description,
+            has_disruption=stop_has_disruption,
+        )
         segments.append(SegmentReport(
             from_location=prev_location,
             to_location=stop["stop_name"],
@@ -130,7 +189,12 @@ def run_monitoring_agent(
 
     # Final segment to destination
     if prev_location != destination:
-        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active, extra_delay = _get_location_risks(destination, mode)
+        weather_risk, weather_detail, disrupt_type, disrupt_detail, disrupt_active, extra_delay = _get_location_risks(
+            destination, mode,
+            disruption_type=disruption_type,
+            disruption_description=disruption_description,
+            has_disruption=False,
+        )
         segments.append(SegmentReport(
             from_location=prev_location,
             to_location=destination,
