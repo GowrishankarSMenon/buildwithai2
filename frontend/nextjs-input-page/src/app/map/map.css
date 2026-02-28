@@ -2430,11 +2430,26 @@
 .bp-container--expanded {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: 99999;
     border-radius: 0;
     height: 100vh;
     width: 100vw;
     border: none;
+    background: #f8fafb;
+}
+
+/* ── Backdrop overlay for expanded mode ── */
+.bp-backdrop {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    z-index: 0;
+    pointer-events: none;
+}
+
+@keyframes bp-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 /* ── Header bar ── */
@@ -2447,6 +2462,15 @@
     border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0;
     z-index: 10;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.bp-header--expanded {
+    padding: 14px 24px;
+    background: linear-gradient(to right, #f8fafc, #f1f5f9);
+    border-bottom: 1px solid #cbd5e1;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 
 .bp-header__title {
@@ -2458,6 +2482,10 @@
     color: #1e293b;
 }
 
+.bp-header--expanded .bp-header__title {
+    font-size: 1rem;
+}
+
 .bp-header__count {
     background: #e0e7ff;
     color: #3730a3;
@@ -2465,6 +2493,47 @@
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 10px;
+}
+
+/* Summary stats in expanded header */
+.bp-header__summary {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-left: auto;
+    margin-right: 24px;
+    padding: 6px 16px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.bp-header__stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.bp-header__stat svg {
+    color: #2563eb;
+}
+
+.bp-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bp-header__hint {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 6px;
 }
 
 .bp-expand-btn {
@@ -2484,6 +2553,32 @@
     background: #f1f5f9;
     color: #1e293b;
     border-color: #cbd5e1;
+}
+
+/* Close button style in expanded mode */
+.bp-expand-btn--close {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+    border: 2px solid #f87171;
+    color: #dc2626;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
+    animation: bp-pulse 2s infinite;
+}
+
+@keyframes bp-pulse {
+    0%, 100% { box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2); }
+    50% { box-shadow: 0 2px 16px rgba(220, 38, 38, 0.4); }
+}
+
+.bp-expand-btn--close:hover {
+    background: linear-gradient(135deg, #fecaca, #fca5a5);
+    color: #b91c1c;
+    border-color: #ef4444;
+    transform: scale(1.08);
+    animation: none;
+    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.35);
 }
 
 /* ── Viewport (scrollable/pannable area) ── */
@@ -2553,7 +2648,7 @@
     background: #fff;
     border: 2px solid #cbd5e1;
     border-radius: 10px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     transition: transform 0.15s, box-shadow 0.15s;
     z-index: 5;
@@ -2582,6 +2677,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    border-radius: 8px 8px 0 0;
 }
 
 .bp-node__code {
@@ -2846,3 +2942,217 @@
     padding-top: 16px;
 }
 .viz-details__val--green { color: #34d399; }
+
+/* ================================================================
+   BLUEPRINT ADD BUTTON & NODE PICKER
+   ================================================================ */
+
+/* ── Add stop button on node pin ── */
+.bp-add-btn {
+    position: absolute;
+    right: -42px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px dashed #10b981;
+    background: #ecfdf5;
+    color: #059669;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 5;
+    opacity: 1;
+}
+
+.bp-add-btn:hover {
+    border-color: #059669;
+    border-style: solid;
+    background: #d1fae5;
+    color: #047857;
+    transform: translateY(-50%) scale(1.2);
+    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.4);
+}
+
+/* ── Node picker dropdown ── */
+.bp-node-picker {
+    width: 300px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+    animation: bp-picker-in 0.2s ease-out;
+}
+
+@keyframes bp-picker-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bp-node-picker__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: linear-gradient(to right, #f8fafc, #f1f5f9);
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.bp-node-picker__close {
+    margin-left: auto;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.bp-node-picker__close:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.bp-node-picker__search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.bp-node-picker__search svg {
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.bp-node-picker__search input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 0.82rem;
+    color: #1e293b;
+    background: transparent;
+}
+
+.bp-node-picker__search input::placeholder {
+    color: #cbd5e1;
+}
+
+.bp-node-picker__list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.bp-node-picker__empty {
+    padding: 20px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.8rem;
+}
+
+.bp-node-picker__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+}
+
+.bp-node-picker__item:hover {
+    background: #f1f5f9;
+}
+
+.bp-node-picker__icon {
+    flex-shrink: 0;
+}
+
+.bp-node-picker__icon--air {
+    color: #7c3aed;
+}
+
+.bp-node-picker__icon--sea {
+    color: #2563eb;
+}
+
+.bp-node-picker__info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.bp-node-picker__name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bp-node-picker__city {
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+.bp-node-picker__code {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.bp-node-picker__hint {
+    padding: 10px 14px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    font-size: 0.72rem;
+    color: #64748b;
+    text-align: center;
+}
+
+.bp-node-picker__hint strong {
+    color: #334155;
+}
+
+/* ── Route selected state ── */
+.bp-route--selected .bp-route-label {
+    box-shadow: 0 0 0 2px #2563eb, 0 4px 12px rgba(37,99,235,0.2);
+}
+
+/* ── Custom route label ── */
+.bp-route-label--custom {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+    border-left-color: #10b981;
+}
