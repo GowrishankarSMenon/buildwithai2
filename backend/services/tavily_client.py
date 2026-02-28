@@ -97,6 +97,7 @@ def fetch_realtime_disruptions(location: str, country: str = "") -> dict:
         f"{location_str} port India disruption OR strike OR political crisis OR war "
         f"OR shipping delay OR supply chain issue OR congestion "
         f"latest news 2026"
+        f"india weather port conditions wind rain storm forecast 2026"
     )
 
     try:
@@ -106,9 +107,39 @@ def fetch_realtime_disruptions(location: str, country: str = "") -> dict:
             search_depth="advanced",
             max_results=5,
             include_answer=True,
-            include_domains=["economictimes.indiatimes.com", "livemint.com", "business-standard.com",
-                             "thehindu.com", "ndtv.com", "maritimegateway.com", "porttechnology.org",
-                             "reuters.com", "hindustantimes.com", "indianexpress.com"],
+            include_domains = [
+    # Maritime & logistics (India)
+    "maritimegateway.com",
+    "indiashippingnews.com",
+    "cargotalk.in",
+    "logisticsinsider.in",
+    "stattimes.com",
+    "porttechnology.org",
+    "seatrade-maritime.com",
+
+    # Aviation / transport
+    "aai.aero",
+    "dgca.gov.in",
+
+    # Business / economy
+    "economictimes.indiatimes.com",
+    "livemint.com",
+    "business-standard.com",
+    "financialexpress.com",
+    "moneycontrol.com",
+
+    # General news
+    "thehindu.com",
+    "indianexpress.com",
+    "hindustantimes.com",
+    "timesofindia.indiatimes.com",
+    "ndtv.com",
+    "reuters.com",
+
+    # Weather / official
+    "imd.gov.in",
+    "accuweather.com",   # ✅ Added
+],
         )
 
         answer = response.get("answer", "")
