@@ -1,19 +1,13 @@
 "use client";
 
 /**
- * VisualizationPage — Route Visualization with Map + Agent Pipeline
- * ==================================================================
+ * VisualizationPage — Route Visualization with Map + Blueprint Graph
+ * ====================================================================
  * Shows after form submission:
- * - Full-screen interactive map with route lines
- * - Disrupted node highlighted (red pulse)
- * - Alternative route overlay (blue dashed)
- * - Animated ship/plane icon at current position
- * - Side panel with route summary + disruption details
+ * - Full-screen interactive map with optimized route lines
+ * - Blueprint-style route graph (right panel) with expand to full-page
  * - Agent pipeline results (monitoring, risk, planner, decision)
- *
- * Modes:
- *   🌐 Live (realtime): Tavily web search for disruptions
- *   🔬 Simulation: Manual disruption injection
+ * - Multi-modal route visualization (sea/air segments)
  */
 
 import React, { useMemo, useState, useEffect } from "react";
@@ -48,6 +42,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { LocationNode, RouteSubmission, OperatingMode } from "./page";
 import { LOCATIONS } from "./page";
+import BlueprintRouteViewer from "./BlueprintRouteViewer";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -120,10 +115,79 @@ function FitBounds({ nodes }: { nodes: LocationNode[] }) {
 export default function VisualizationPage({ data, onBack }: Props) {
     const { origin, destination, stops, currentPosition, disruption, mode: operatingMode } = data;
 
-    // Full route in order
+    // ── Route Planning State ──
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [plannedRoutes, setPlannedRoutes] = useState<any[]>([]);
+    const [routesLoading, setRoutesLoading] = useState(true);
+    const [routesError, setRoutesError] = useState<string | null>(null);
+
+    // Fetch planned routes on mount
+    useEffect(() => {
+        const fetchRoutes = async () => {
+            setRoutesLoading(true);
+            setRoutesError(null);
+            try {
+                const payload = {
+                    source_city: (data as any).sourceCity || origin.name,
+                    destination_city: (data as any).destCity || destination.name,
+                    intermediate_cities: (data as any).intermediateCities || stops.map((s: LocationNode) => s.name),
+                    num_routes: 4,
+                };
+                const res = await fetch(`${API_BASE}/plan-routes`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) throw new Error(`Route planning failed: ${res.status}`);
+                const json = await res.json();
+                setPlannedRoutes(json.routes || []);
+            } catch (err) {
+                setRoutesError(err instanceof Error ? err.message : "Route planning failed");
+            } finally {
+                setRoutesLoading(false);
+            }
+        };
+        fetchRoutes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Build route nodes from the best planned route for the map
     const routeNodes: LocationNode[] = useMemo(() => {
+        if (plannedRoutes.length > 0) {
+            const best = plannedRoutes[0];
+            const nodes: LocationNode[] = [];
+            if (best.segments?.length > 0) {
+                nodes.push({
+                    id: best.segments[0].from.node_id,
+                    name: best.segments[0].from.name,
+                    country: "India",
+                    type: best.segments[0].from.node_type === "airport" ? "airport" : "port",
+                    lat: best.segments[0].from.lat,
+                    lng: best.segments[0].from.lng,
+                });
+                for (const seg of best.segments) {
+                    nodes.push({
+                        id: seg.to.node_id,
+                        name: seg.to.name,
+                        country: "India",
+                        type: seg.to.node_type === "airport" ? "airport" : "port",
+                        lat: seg.to.lat,
+                        lng: seg.to.lng,
+                    });
+                }
+            }
+            return nodes.length > 0 ? nodes : [origin, ...stops, destination];
+        }
         return [origin, ...stops, destination];
-    }, [origin, stops, destination]);
+    }, [plannedRoutes, origin, stops, destination]);
+
+    // Segment transport modes from best route
+    const segmentModes: string[] = useMemo(() => {
+        if (plannedRoutes.length > 0 && plannedRoutes[0].segments) {
+            return plannedRoutes[0].segments.map((s: any) => s.transport_mode);
+        }
+        return [];
+    }, [plannedRoutes]);
 
     // Determine transport mode based on any airport in route
     const mode: "sea" | "air" = useMemo(() => {
@@ -262,19 +326,20 @@ export default function VisualizationPage({ data, onBack }: Props) {
                         const isFromDisrupted = disruption && from.id === disruption.node.id;
                         const segDisrupt = isToDisrupted || isFromDisrupted;
                         const pts = curvedPath([from.lat, from.lng], [to.lat, to.lng]);
-                        const past = currentIdx > i; // segment already traversed
-                        const color = segDisrupt ? "#dc2626" : past ? "#059669" : "#2563eb";
-                        const dash = segDisrupt ? "8 6" : undefined;
+                        const past = currentIdx > i;
+                        const segMode = segmentModes[i] || "sea";
+                        const baseColor = segDisrupt ? "#dc2626" : past ? "#059669" : segMode === "air" ? "#7c3aed" : "#2563eb";
+                        const dash = segDisrupt ? "8 6" : segMode === "air" ? "8 4" : undefined;
 
                         return (
                             <React.Fragment key={`seg-${i}`}>
                                 <Polyline
                                     positions={pts}
-                                    pathOptions={{ color, weight: 4, opacity: 0.8, dashArray: dash }}
+                                    pathOptions={{ color: baseColor, weight: 4, opacity: 0.8, dashArray: dash }}
                                 />
                                 <Polyline
                                     positions={pts}
-                                    pathOptions={{ color, weight: 10, opacity: 0.12 }}
+                                    pathOptions={{ color: baseColor, weight: 10, opacity: 0.12 }}
                                     interactive={false}
                                 />
                             </React.Fragment>
@@ -562,6 +627,17 @@ export default function VisualizationPage({ data, onBack }: Props) {
                                     </div>
                                 )}
                             </>
+                        )}
+                    </div>
+
+                    {/* ── Blueprint Route Viewer ── */}
+                    <div className="viz-blueprint-section">
+                        <BlueprintRouteViewer routes={plannedRoutes} loading={routesLoading} />
+                        {routesError && (
+                            <div className="viz-alert viz-alert--red" style={{ marginTop: 10 }}>
+                                <div className="viz-alert__title">Route Planning Error</div>
+                                <div className="viz-alert__detail">{routesError}</div>
+                            </div>
                         )}
                     </div>
                 </div>
