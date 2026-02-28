@@ -50,9 +50,11 @@ def run_agent_pipeline(
     origin: str,
     destination: str,
     stops: list[dict],
+    mode: str = "simulation",
 ) -> dict:
     """
     Run the full agent pipeline: monitor → risk → plan → decision.
+    mode: "simulation" for mock data, "realtime" for Tavily live data.
     """
 
     print(f"\n{'═' * 60}")
@@ -67,6 +69,7 @@ def run_agent_pipeline(
     _log_header("📡", "STAGE 1: MonitoringAgent", CYAN)
     _log_input("product_id", product_id)
     _log_input("route", f"{origin} → {' → '.join(s['stop_name'] for s in stops)} → {destination}")
+    _log_input("mode", f"{'🌐 REAL-TIME (Tavily)' if mode == 'realtime' else '🔬 SIMULATION (Mock Data)'}")
     for i, s in enumerate(stops):
         _log_input(f"stop[{i}]", f"{s['stop_name']} (ETA: {s['eta_days']}d, Delay: {s['delay_days']}d)")
 
@@ -76,6 +79,7 @@ def run_agent_pipeline(
         origin=origin,
         destination=destination,
         stops=stops,
+        mode=mode,
     )
 
     _log_output("total_eta", f"{monitoring.total_eta} days")

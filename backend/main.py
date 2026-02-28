@@ -51,6 +51,7 @@ class RunAgentsRequest(BaseModel):
     origin: str
     destination: str
     stops: list[RouteStop]
+    mode: str = "simulation"  # "simulation" or "realtime"
 
 
 class ExecutePlanRequest(BaseModel):
@@ -69,14 +70,35 @@ def status():
 
 
 @app.get("/locations")
-def get_locations():
-    """Return all available shipping locations with weather & disruption data."""
-    return {
-        "locations": [
-            {**loc, **get_location_info(loc["name"])}
-            for loc in LOCATIONS
-        ]
-    }
+def get_locations(mode: str = "simulation"):
+    """
+    Return all available shipping locations with weather & disruption data.
+    In realtime mode, we only return basic location info here — Tavily is called
+    per-port during the agent pipeline (run-agents) to avoid unnecessary API calls.
+    """
+    if mode == "realtime":
+        # Return locations with basic metadata only; Tavily is invoked
+        # during the agent pipeline for the ports the user actually selects.
+        return {
+            "locations": [
+                {
+                    **loc,
+                    "location": loc["name"],
+                    "weather": {"risk": "unknown", "detail": "Run agent pipeline for live data", "condition": "Pending"},
+                    "disruption": {"active": False, "type": "Pending", "detail": "Run agent pipeline for live data", "severity": "low", "extra_delay_days": 0.0},
+                }
+                for loc in LOCATIONS
+            ],
+            "mode": "realtime",
+        }
+    else:
+        return {
+            "locations": [
+                {**loc, **get_location_info(loc["name"])}
+                for loc in LOCATIONS
+            ],
+            "mode": "simulation",
+        }
 
 
 @app.post("/run-agents")
@@ -93,8 +115,9 @@ def run_agents(request: RunAgentsRequest):
             origin=request.origin,
             destination=request.destination,
             stops=[s.model_dump() for s in request.stops],
+            mode=request.mode,
         )
-        return {"success": True, "data": result}
+        return {"success": True, "data": result, "mode": request.mode}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
