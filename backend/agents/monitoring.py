@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from services.groq_client import get_llm
 from services.mock_data import get_weather, get_disruption, LOCATIONS
-from services.tavily_client import fetch_realtime_disruptions, fetch_realtime_weather
+from services.tavily_client import fetch_realtime_disruptions
+from services.weather_client import fetch_realtime_weather
 
 
 # ── Structured Output Models ──────────────────────────────────────────

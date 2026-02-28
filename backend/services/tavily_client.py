@@ -3,7 +3,10 @@ tavily_client.py — Tavily Real-Time Disruption Data Service
 =============================================================
 Fetches real-time supply chain disruption data for locations using
 the Tavily Search API. Searches for port strikes, wars, political
-issues, weather disruptions, and other events affecting shipping.
+issues, and other events affecting shipping.
+
+Note: Weather data is handled separately by weather_client.py
+using the OpenWeatherMap API.
 """
 
 import os
@@ -164,90 +167,4 @@ def fetch_realtime_disruptions(location: str, country: str = "") -> dict:
         }
 
 
-def fetch_realtime_weather(location: str, country: str = "") -> dict:
-    """
-    Fetch real-time weather data for a shipping location using Tavily.
 
-    Returns dict matching the mock_data weather format:
-        {
-            "risk": str,  # "low", "medium", "high"
-            "detail": str,
-            "temp_c": int,
-            "condition": str,
-            "source": "realtime",
-        }
-    """
-    location_str = f"{location} port India"
-
-    query = (
-        f"{location} port India current weather conditions impact on shipping "
-        f"OR port operations OR sea conditions latest 2026"
-    )
-
-    try:
-        client = _get_client()
-        response = client.search(
-            query=query,
-            search_depth="basic",
-            max_results=3,
-            include_answer=True,
-            include_domains=["economictimes.indiatimes.com", "livemint.com", "thehindu.com",
-                             "ndtv.com", "weather.com", "accuweather.com", "maritimegateway.com",
-                             "reuters.com", "imd.gov.in"],
-        )
-
-        answer = response.get("answer", "")
-        results = response.get("results", [])
-
-        all_content = answer + " " + " ".join(
-            r.get("content", "") for r in results
-        )
-
-        if not all_content.strip():
-            return {
-                "risk": "low",
-                "detail": f"No real-time weather data for {location}",
-                "temp_c": 20,
-                "condition": "Unknown",
-                "source": "realtime",
-            }
-
-        # Classify weather risk
-        risk = _classify_severity(all_content)
-
-        # Try to extract temperature
-        temp_match = re.search(r'(\d{1,2})\s*°?\s*[Cc]', all_content)
-        temp_c = int(temp_match.group(1)) if temp_match else 20
-
-        # Extract condition
-        weather_conditions = ["typhoon", "hurricane", "storm", "monsoon", "rain",
-                              "fog", "clear", "sunny", "cloudy", "wind", "snow",
-                              "haze", "thunderstorm", "flood"]
-        condition = "Normal"
-        for wc in weather_conditions:
-            if wc in all_content.lower():
-                condition = wc.capitalize()
-                break
-
-        detail = answer.strip() if answer.strip() else (
-            results[0].get("content", "")[:300] if results else
-            f"No weather details for {location}"
-        )
-        detail = detail[:500]
-
-        return {
-            "risk": risk,
-            "detail": detail,
-            "temp_c": temp_c,
-            "condition": condition,
-            "source": "realtime",
-        }
-
-    except Exception as e:
-        return {
-            "risk": "low",
-            "detail": f"Failed to fetch weather for {location}: {str(e)}",
-            "temp_c": 20,
-            "condition": "Error",
-            "source": "realtime",
-        }
