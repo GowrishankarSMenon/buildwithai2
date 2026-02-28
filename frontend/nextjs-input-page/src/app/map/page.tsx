@@ -7,36 +7,27 @@
  *   🌐 Live Mode — Tavily detects disruptions via real-time web search
  *   🔬 Simulation Mode — Manually inject disruptions for demo
  *
- * Blurred map background with a centered form for:
- * - Mode toggle (Live / Simulation)
- * - Initial node (origin)
- * - Final node (destination)
- * - Intermediate stops
- * - Current position of shipment
- * - Disruption node + reason (simulation mode only)
- * Submitting transitions to the visualization page.
+ * City-based input: user enters source city, destination city, and
+ * intermediate city stops.  The backend computes optimal multi-modal
+ * routes (sea + air) and returns them as blueprint data.
  */
 
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import "./map.css";
 
 import {
     Shield,
     Search,
-    X,
     Plane,
-    Warehouse,
     AlertTriangle,
     Anchor,
     MapPin,
     Navigation,
     Plus,
     Trash2,
-    ChevronDown,
     Send,
     Loader2,
-    Locate,
     Globe,
     FlaskConical,
 } from "lucide-react";
@@ -64,9 +55,13 @@ export interface RouteSubmission {
         description: string;
     } | null;
     mode: OperatingMode;
+    /** City-based route planning data */
+    sourceCity: string;
+    destCity: string;
+    intermediateCities: string[];
 }
 
-// ── Indian Ports (matching world branch backend) ──
+// Keep LOCATIONS for backward compat with VisualizationPage map markers
 export const LOCATIONS: LocationNode[] = [
     { id: "N1",  name: "Nhava Sheva (JNPT)", country: "India", type: "port", lat: 18.9490, lng: 72.9510 },
     { id: "N2",  name: "Chennai",             country: "India", type: "port", lat: 13.0827, lng: 80.2707 },
@@ -80,27 +75,42 @@ export const LOCATIONS: LocationNode[] = [
     { id: "N10", name: "Paradip",             country: "India", type: "port", lat: 20.2644, lng: 86.6085 },
 ];
 
-// Dynamic map (background only)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Dynamic components
 const BackgroundMap = dynamic(() => import("./BackgroundMap"), { ssr: false });
-// Visualization page
 const VisualizationPage = dynamic(() => import("./VisualizationPage"), { ssr: false });
 
-// ── Location Picker Component ──
-function LocationPicker({
-    label, value, onChange, placeholder, icon, exclude, locations,
+// ── City Autocomplete Input ──
+interface CityOption {
+    city: string;
+    state: string;
+    lat: number;
+    lng: number;
+    has_port: boolean;
+    has_airport: boolean;
+    port_count: number;
+    airport_count: number;
+}
+
+function CityInput({
+    label,
+    value,
+    onChange,
+    placeholder,
+    icon,
 }: {
     label: string;
     value: string;
-    onChange: (id: string) => void;
+    onChange: (city: string) => void;
     placeholder: string;
     icon: React.ReactNode;
-    exclude?: string[];
-    locations?: LocationNode[];
 }) {
     const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState("");
+    const [options, setOptions] = useState<CityOption[]>([]);
+    const [loading, setLoading] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
-    const locs = locations || LOCATIONS;
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -110,61 +120,61 @@ function LocationPicker({
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = search.toLowerCase();
-        return locs.filter(
-            (l) =>
-                (!exclude || !exclude.includes(l.id)) &&
-                (l.name.toLowerCase().includes(q) || l.country.toLowerCase().includes(q))
-        );
-    }, [search, exclude, locs]);
-
-    const selected = locs.find((l) => l.id === value);
+    const fetchCities = useCallback((q: string) => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(async () => {
+            if (q.length < 1) { setOptions([]); return; }
+            setLoading(true);
+            try {
+                const res = await fetch(`${API_BASE}/cities?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                setOptions(data.cities || []);
+            } catch {
+                setOptions([]);
+            } finally {
+                setLoading(false);
+            }
+        }, 250);
+    }, []);
 
     return (
-        <div className="lp-picker" ref={ref}>
-            <label className="lp-picker__label">{label}</label>
-            <button className="lp-picker__btn" onClick={() => setOpen(!open)} type="button">
-                <span className="lp-picker__icon">{icon}</span>
-                {selected ? (
-                    <span className="lp-picker__selected">
-                        {selected.name} <span className="lp-picker__country">({selected.country})</span>
-                    </span>
-                ) : (
-                    <span className="lp-picker__placeholder">{placeholder}</span>
-                )}
-                <ChevronDown size={14} className={`lp-picker__chevron ${open ? "lp-picker__chevron--open" : ""}`} />
-            </button>
-            <div className={`lp-picker__dropdown ${open ? "lp-picker__dropdown--open" : ""}`}>
-                <div className="lp-picker__search-wrap">
-                    <Search size={14} className="lp-picker__search-icon" />
-                    <input
-                        className="lp-picker__search"
-                        placeholder="Search..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        autoFocus
-                    />
-                </div>
-                <div className="lp-picker__list">
-                    {filtered.length === 0 ? (
-                        <div className="lp-picker__empty">No locations found</div>
-                    ) : (
-                        filtered.map((loc) => (
-                            <button
-                                key={loc.id}
-                                className={`lp-picker__option ${value === loc.id ? "lp-picker__option--active" : ""}`}
-                                onClick={() => { onChange(loc.id); setOpen(false); setSearch(""); }}
-                                type="button"
-                            >
-                                {loc.type === "airport" ? <Plane size={13} /> : <Anchor size={13} />}
-                                <span>{loc.name}</span>
-                                <span className="lp-picker__opt-country">{loc.country}</span>
-                            </button>
-                        ))
-                    )}
-                </div>
+        <div className="lp-city-field" ref={ref}>
+            <label className="lp-city-field__label">{icon} {label}</label>
+            <div className="lp-city-wrap">
+                <div className="lp-city-wrap__icon"><Search size={14} /></div>
+                <input
+                    className="lp-city-input"
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={(e) => {
+                        onChange(e.target.value);
+                        fetchCities(e.target.value);
+                        setOpen(true);
+                    }}
+                    onFocus={() => { if (value.length >= 1) { fetchCities(value); setOpen(true); } }}
+                />
             </div>
+            {open && options.length > 0 && (
+                <div className="lp-city-dropdown">
+                    {options.map((opt, i) => (
+                        <button
+                            key={i}
+                            className="lp-city-option"
+                            onClick={() => { onChange(opt.city); setOpen(false); }}
+                            type="button"
+                        >
+                            <MapPin size={13} />
+                            <span>{opt.city}</span>
+                            <span className="lp-city-option__icons">
+                                {opt.has_port && <Anchor size={11} />}
+                                {opt.has_airport && <Plane size={11} />}
+                            </span>
+                            <span className="lp-city-option__state">{opt.state}</span>
+                        </button>
+                    ))}
+                    {loading && <div className="lp-city-option" style={{ justifyContent: "center", opacity: 0.5 }}><Loader2 size={14} className="viz-spinner" /></div>}
+                </div>
+            )}
         </div>
     );
 }
@@ -172,84 +182,56 @@ function LocationPicker({
 // ── Main Page ──
 export default function MapPage() {
     const [mode, setMode] = useState<OperatingMode>("simulation");
-    const [origin, setOrigin] = useState("");
-    const [destination, setDestination] = useState("");
-    const [stops, setStops] = useState<string[]>([]);
-    const [currentPos, setCurrentPos] = useState("");
-    const [disruptionNode, setDisruptionNode] = useState("");
+    const [sourceCity, setSourceCity] = useState("");
+    const [destCity, setDestCity] = useState("");
+    const [intermediateCities, setIntermediateCities] = useState<string[]>([]);
     const [disruptionType, setDisruptionType] = useState("Port Strike");
     const [disruptionDesc, setDisruptionDesc] = useState("");
     const [submission, setSubmission] = useState<RouteSubmission | null>(null);
 
-    // All selected IDs (to prevent duplicates)
-    const usedIds = useMemo(() => {
-        const ids: string[] = [];
-        if (origin) ids.push(origin);
-        if (destination) ids.push(destination);
-        stops.forEach((s) => { if (s) ids.push(s); });
-        return ids;
-    }, [origin, destination, stops]);
+    const addStop = useCallback(() => setIntermediateCities((prev) => [...prev, ""]), []);
+    const removeStop = useCallback((i: number) => setIntermediateCities((prev) => prev.filter((_, idx) => idx !== i)), []);
+    const updateStop = useCallback((i: number, val: string) => setIntermediateCities((prev) => prev.map((s, idx) => (idx === i ? val : s))), []);
 
-    // Full ordered route node IDs
-    const routeNodeIds = useMemo(() => {
-        const ids: string[] = [];
-        if (origin) ids.push(origin);
-        stops.forEach((s) => { if (s) ids.push(s); });
-        if (destination) ids.push(destination);
-        return ids;
-    }, [origin, destination, stops]);
-
-    const addStop = useCallback(() => setStops((prev) => [...prev, ""]), []);
-    const removeStop = useCallback((i: number) => setStops((prev) => prev.filter((_, idx) => idx !== i)), []);
-    const updateStop = useCallback((i: number, val: string) => setStops((prev) => prev.map((s, idx) => (idx === i ? val : s))), []);
-
-    const canSubmit = origin && destination && routeNodeIds.length >= 2;
+    const canSubmit = sourceCity.trim().length >= 2 && destCity.trim().length >= 2;
 
     const handleSubmit = useCallback(() => {
         if (!canSubmit) return;
-        const originNode = LOCATIONS.find((l) => l.id === origin)!;
-        const destNode = LOCATIONS.find((l) => l.id === destination)!;
-        const stopNodes = stops.map((s) => LOCATIONS.find((l) => l.id === s)).filter(Boolean) as LocationNode[];
-        const curPosNode = currentPos ? LOCATIONS.find((l) => l.id === currentPos) || null : null;
-        const disruptNode = disruptionNode ? LOCATIONS.find((l) => l.id === disruptionNode) || null : null;
+
+        // Create minimal LocationNode stubs for the visualization map (actual route nodes come from blueprint)
+        const originNode: LocationNode = { id: "src", name: sourceCity, country: "India", type: "port", lat: 20, lng: 78 };
+        const destNode: LocationNode = { id: "dst", name: destCity, country: "India", type: "port", lat: 20, lng: 78 };
 
         setSubmission({
             origin: originNode,
             destination: destNode,
-            stops: stopNodes,
-            currentPosition: curPosNode,
-            disruption: (mode === "simulation" && disruptNode)
-                ? { node: disruptNode, type: disruptionType, description: disruptionDesc || disruptionType }
+            stops: [],
+            currentPosition: null,
+            disruption: mode === "simulation" && disruptionDesc
+                ? { node: originNode, type: disruptionType, description: disruptionDesc }
                 : null,
             mode,
+            sourceCity: sourceCity.trim(),
+            destCity: destCity.trim(),
+            intermediateCities: intermediateCities.filter((c) => c.trim().length > 0),
         });
-    }, [canSubmit, origin, destination, stops, currentPos, disruptionNode, disruptionType, disruptionDesc, mode]);
+    }, [canSubmit, sourceCity, destCity, intermediateCities, mode, disruptionType, disruptionDesc]);
 
-    // If submitted → show visualization
     if (submission) {
-        return (
-            <VisualizationPage
-                data={submission}
-                onBack={() => setSubmission(null)}
-            />
-        );
+        return <VisualizationPage data={submission} onBack={() => setSubmission(null)} />;
     }
 
     return (
         <div className="lp">
-            {/* Blurred map background */}
-            <div className="lp-bg">
-                <BackgroundMap />
-            </div>
+            <div className="lp-bg"><BackgroundMap /></div>
             <div className="lp-blur-overlay" />
 
-            {/* Centered card */}
             <div className="lp-center">
                 <div className="lp-logo">
                     <Shield size={28} />
                     <div>
                         <div className="lp-logo__title">Disruption Shield</div>
-                        <div className="lp-logo__sub">Indian Port Supply Chain Route Planner</div>
+                        <div className="lp-logo__sub">Multi-Modal Supply Chain Route Planner</div>
                     </div>
                 </div>
 
@@ -260,31 +242,27 @@ export default function MapPage() {
                         onClick={() => setMode("realtime")}
                         type="button"
                     >
-                        <Globe size={15} />
-                        <span>Live Mode</span>
-                        <span className="lp-mode-desc">Tavily web search</span>
+                        <Globe size={15} /> <span>Live Mode</span>
                     </button>
                     <button
                         className={`lp-mode-btn ${mode === "simulation" ? "lp-mode-btn--active lp-mode-btn--sim" : ""}`}
                         onClick={() => setMode("simulation")}
                         type="button"
                     >
-                        <FlaskConical size={15} />
-                        <span>Simulation</span>
-                        <span className="lp-mode-desc">Manual injection</span>
+                        <FlaskConical size={15} /> <span>Simulation</span>
                     </button>
                 </div>
 
                 {mode === "realtime" && (
                     <div className="lp-mode-banner lp-mode-banner--live">
                         <Globe size={14} />
-                        <span><strong>Live Mode:</strong> Tavily will search the web for real-time disruptions at each port in your route.</span>
+                        <span><strong>Live Mode:</strong> Tavily searches for real-time disruptions.</span>
                     </div>
                 )}
                 {mode === "simulation" && (
                     <div className="lp-mode-banner lp-mode-banner--sim">
                         <FlaskConical size={14} />
-                        <span><strong>Simulation Mode:</strong> Manually inject a disruption to demonstrate a real-world scenario.</span>
+                        <span><strong>Simulation:</strong> Inject disruptions manually for demo.</span>
                     </div>
                 )}
 
@@ -295,14 +273,13 @@ export default function MapPage() {
                     </div>
 
                     <div className="lp-card__body">
-                        {/* Origin */}
-                        <LocationPicker
-                            label="Origin"
-                            value={origin}
-                            onChange={setOrigin}
-                            placeholder="Select origin port..."
+                        {/* Source City */}
+                        <CityInput
+                            label="Source City"
+                            value={sourceCity}
+                            onChange={setSourceCity}
+                            placeholder="e.g. Mumbai, New Delhi, Chennai..."
                             icon={<div className="lp-dot lp-dot--green" />}
-                            exclude={usedIds.filter((id) => id !== origin)}
                         />
 
                         {/* Intermediate Stops */}
@@ -313,15 +290,14 @@ export default function MapPage() {
                                     <Plus size={14} /> Add Stop
                                 </button>
                             </div>
-                            {stops.map((stop, i) => (
-                                <div key={i} className="lp-stop-row" style={{ animationDelay: `${i * 60}ms`, position: 'relative', zIndex: 50 - i }}>
-                                    <LocationPicker
+                            {intermediateCities.map((city, i) => (
+                                <div key={i} className="lp-stop-row" style={{ animationDelay: `${i * 60}ms`, position: "relative", zIndex: 50 - i }}>
+                                    <CityInput
                                         label={`Stop ${i + 1}`}
-                                        value={stop}
+                                        value={city}
                                         onChange={(val) => updateStop(i, val)}
-                                        placeholder="Select intermediate port..."
+                                        placeholder="Intermediate city..."
                                         icon={<div className="lp-dot lp-dot--blue" />}
-                                        exclude={usedIds.filter((id) => id !== stop)}
                                     />
                                     <button className="lp-remove-btn" onClick={() => removeStop(i)} type="button">
                                         <Trash2 size={14} />
@@ -330,71 +306,39 @@ export default function MapPage() {
                             ))}
                         </div>
 
-                        {/* Destination */}
-                        <LocationPicker
-                            label="Destination"
-                            value={destination}
-                            onChange={setDestination}
-                            placeholder="Select destination port..."
+                        {/* Destination City */}
+                        <CityInput
+                            label="Destination City"
+                            value={destCity}
+                            onChange={setDestCity}
+                            placeholder="e.g. Kochi, Kolkata, Visakhapatnam..."
                             icon={<div className="lp-dot lp-dot--red" />}
-                            exclude={usedIds.filter((id) => id !== destination)}
                         />
 
-                        {/* Current Position */}
-                        {routeNodeIds.length >= 2 && (
-                            <>
-                                <div className="lp-divider" />
-                                <div className="lp-section-title">
-                                    <Locate size={15} />
-                                    Current Position
-                                </div>
-                                <LocationPicker
-                                    label="Shipment is currently at"
-                                    value={currentPos}
-                                    onChange={setCurrentPos}
-                                    placeholder="Where is the shipment now?"
-                                    icon={<Locate size={13} />}
-                                    locations={routeNodeIds.map((id) => LOCATIONS.find((l) => l.id === id)).filter(Boolean) as LocationNode[]}
-                                />
-                            </>
-                        )}
-
-                        {/* Disruption Section (Simulation mode only) */}
+                        {/* Disruption (Simulation only) */}
                         {mode === "simulation" && (
                             <>
                                 <div className="lp-divider" />
                                 <div className="lp-section-title">
-                                    <AlertTriangle size={15} />
-                                    Inject Disruption (Simulation)
+                                    <AlertTriangle size={15} /> Inject Disruption (Optional)
                                 </div>
-
-                                <LocationPicker
-                                    label="Disrupted Node"
-                                    value={disruptionNode}
-                                    onChange={setDisruptionNode}
-                                    placeholder="Which node has a disruption?"
-                                    icon={<AlertTriangle size={13} />}
-                                />
-
-                                {disruptionNode && (
-                                    <div className="lp-disruption-fields">
-                                        <div className="lp-field">
-                                            <label className="lp-field__label">Disruption Type</label>
-                                            <select className="lp-field__select" value={disruptionType} onChange={(e) => setDisruptionType(e.target.value)}>
-                                                <option>Port Strike</option>
-                                                <option>Severe Weather</option>
-                                                <option>Port Congestion</option>
-                                                <option>Equipment Failure</option>
-                                                <option>Security Alert</option>
-                                                <option>Customs Delay</option>
-                                            </select>
-                                        </div>
-                                        <div className="lp-field">
-                                            <label className="lp-field__label">Description</label>
-                                            <input className="lp-field__input" placeholder="Describe..." value={disruptionDesc} onChange={(e) => setDisruptionDesc(e.target.value)} />
-                                        </div>
+                                <div className="lp-disruption-fields">
+                                    <div className="lp-field">
+                                        <label className="lp-field__label">Disruption Type</label>
+                                        <select className="lp-field__select" value={disruptionType} onChange={(e) => setDisruptionType(e.target.value)}>
+                                            <option>Port Strike</option>
+                                            <option>Severe Weather</option>
+                                            <option>Port Congestion</option>
+                                            <option>Equipment Failure</option>
+                                            <option>Security Alert</option>
+                                            <option>Customs Delay</option>
+                                        </select>
                                     </div>
-                                )}
+                                    <div className="lp-field">
+                                        <label className="lp-field__label">Description</label>
+                                        <input className="lp-field__input" placeholder="Describe..." value={disruptionDesc} onChange={(e) => setDisruptionDesc(e.target.value)} />
+                                    </div>
+                                </div>
                             </>
                         )}
                     </div>
@@ -402,9 +346,9 @@ export default function MapPage() {
                     {/* Footer */}
                     <div className="lp-card__footer">
                         <div className="lp-route-preview">
-                            {routeNodeIds.length > 0 && (
+                            {sourceCity && destCity && (
                                 <span className="lp-route-preview__text">
-                                    {routeNodeIds.map((id) => LOCATIONS.find((l) => l.id === id)?.name || "?").join(" → ")}
+                                    {[sourceCity, ...intermediateCities.filter(Boolean), destCity].join(" → ")}
                                 </span>
                             )}
                         </div>

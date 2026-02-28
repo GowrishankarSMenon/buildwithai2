@@ -17,6 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agents.pipeline import run_agent_pipeline
 from services.mock_data import LOCATIONS, LOCATION_NAMES, get_location_info
+from services.db_service import get_all_nodes, get_unique_cities, search_cities, find_nodes_in_city
+from services.route_planner import compute_routes
 
 # ── FastAPI App ───────────────────────────────────────────────────────
 
@@ -166,6 +168,63 @@ def execute_plan(request: ExecutePlanRequest):
             **response,
         },
     }
+
+
+# ── City & Route Planning Endpoints ───────────────────────────────────
+
+class PlanRoutesRequest(BaseModel):
+    """Input for multi-modal route planning."""
+    source_city: str
+    destination_city: str
+    intermediate_cities: list[str] = []
+    source_state: str | None = None
+    dest_state: str | None = None
+    num_routes: int = 4
+
+
+@app.get("/cities")
+def list_cities(q: str = ""):
+    """Search or list all cities with transport infrastructure."""
+    if q:
+        return {"cities": search_cities(q)}
+    return {"cities": get_unique_cities()}
+
+
+@app.get("/transport-nodes")
+def list_transport_nodes(city: str | None = None):
+    """List all transport nodes, optionally filtered by city."""
+    if city:
+        result = find_nodes_in_city(city)
+        return {"ports": result["ports"], "airports": result["airports"]}
+    return {"nodes": get_all_nodes()}
+
+
+@app.post("/plan-routes")
+def plan_routes(request: PlanRoutesRequest):
+    """
+    Compute optimal multi-modal routes between cities.
+    Returns the best route + up to 3 alternatives, each with
+    per-segment cost, time, and transport mode breakdowns.
+    """
+    try:
+        routes = compute_routes(
+            source_city=request.source_city,
+            dest_city=request.destination_city,
+            intermediate_cities=request.intermediate_cities or [],
+            source_state=request.source_state,
+            dest_state=request.dest_state,
+            num_routes=request.num_routes,
+        )
+        return {
+            "success": True,
+            "routes": [r.to_dict() for r in routes],
+            "source": request.source_city,
+            "destination": request.destination_city,
+            "intermediates": request.intermediate_cities,
+            "total_routes_found": len(routes),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
