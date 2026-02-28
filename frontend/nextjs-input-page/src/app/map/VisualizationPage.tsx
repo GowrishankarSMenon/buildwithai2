@@ -22,12 +22,11 @@ import {
     AlertTriangle,
     Ship,
     Route,
-    Info,
     Navigation,
     Zap,
-    GitBranch,
     Clock,
     MapPin,
+    ChevronLeft,
     ChevronRight,
     Globe,
     FlaskConical,
@@ -37,16 +36,19 @@ import {
     DollarSign,
     CheckCircle2,
     Brain,
+    X,
+    Maximize2,
+    Radar,
 } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { LocationNode, RouteSubmission, OperatingMode } from "./page";
 import { LOCATIONS } from "./page";
-import BlueprintRouteViewer, { 
-    RouteData, 
-    RouteNodeData, 
+import BlueprintRouteViewer, {
+    RouteData,
+    RouteNodeData,
     SegmentData,
-    TransportNode 
+    TransportNode
 } from "./BlueprintRouteViewer";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -186,14 +188,14 @@ export default function VisualizationPage({ data, onBack }: Props) {
             }
         };
         fetchRoutes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Build route nodes from selected route (or best route) for the map
     const routeNodes: LocationNode[] = useMemo(() => {
         // Use selected route if available, otherwise use best route
         const routeToUse = selectedRoute || (plannedRoutes.length > 0 ? plannedRoutes[0] : null);
-        
+
         if (routeToUse && routeToUse.segments?.length > 0) {
             const nodes: LocationNode[] = [];
             nodes.push({
@@ -275,26 +277,26 @@ export default function VisualizationPage({ data, onBack }: Props) {
         // This modifies the existing route rather than creating a new one
         try {
             setRoutesLoading(true);
-            
+
             // Find the first route (best route) and the segment to split
             const bestRoute = plannedRoutes[0];
             if (!bestRoute || !bestRoute.segments) {
                 throw new Error("No route available to modify");
             }
-            
+
             // Find the index of the segment that goes from fromNode to toNode
             const segmentIndex = bestRoute.segments.findIndex(
-                (seg: SegmentData) => 
-                    seg.from.node_id === fromNode.node_id && 
+                (seg: SegmentData) =>
+                    seg.from.node_id === fromNode.node_id &&
                     seg.to.node_id === toNode.node_id
             );
-            
+
             if (segmentIndex === -1) {
                 throw new Error("Could not find segment to split");
             }
-            
+
             const originalSegment = bestRoute.segments[segmentIndex];
-            
+
             // Create the new intermediate node data
             const newNode: RouteNodeData = {
                 node_id: selectedStop.id,
@@ -307,7 +309,7 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 subtype: selectedStop.subtype,
                 code: selectedStop.code,
             };
-            
+
             // Calculate distances for proportional cost/time split
             const calcDistance = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
                 const R = 6371; // km
@@ -315,16 +317,16 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 const dLng = (b.lng - a.lng) * Math.PI / 180;
                 const lat1 = a.lat * Math.PI / 180;
                 const lat2 = b.lat * Math.PI / 180;
-                const aa = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
-                return R * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
+                const aa = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+                return R * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
             };
-            
+
             const dist1 = calcDistance(fromNode, newNode);
             const dist2 = calcDistance(newNode, toNode);
             const totalNewDist = dist1 + dist2;
             const ratio1 = totalNewDist > 0 ? dist1 / totalNewDist : 0.5;
             const ratio2 = 1 - ratio1;
-            
+
             // Create two new segments that replace the original
             const segment1: SegmentData = {
                 from: originalSegment.from,
@@ -333,14 +335,14 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 distance_km: dist1,
                 cost_usd: originalSegment.cost_usd * ratio1,
                 time_hours: originalSegment.time_hours * ratio1,
-                cumulative_cost: segmentIndex === 0 
-                    ? originalSegment.cost_usd * ratio1 
+                cumulative_cost: segmentIndex === 0
+                    ? originalSegment.cost_usd * ratio1
                     : bestRoute.segments[segmentIndex - 1].cumulative_cost + originalSegment.cost_usd * ratio1,
-                cumulative_time_hours: segmentIndex === 0 
-                    ? originalSegment.time_hours * ratio1 
+                cumulative_time_hours: segmentIndex === 0
+                    ? originalSegment.time_hours * ratio1
                     : bestRoute.segments[segmentIndex - 1].cumulative_time_hours + originalSegment.time_hours * ratio1,
             };
-            
+
             const segment2: SegmentData = {
                 from: newNode,
                 to: originalSegment.to,
@@ -351,7 +353,7 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 cumulative_cost: segment1.cumulative_cost + originalSegment.cost_usd * ratio2,
                 cumulative_time_hours: segment1.cumulative_time_hours + originalSegment.time_hours * ratio2,
             };
-            
+
             // Build the new segments array with the insertion
             const newSegments: SegmentData[] = [
                 ...bestRoute.segments.slice(0, segmentIndex),
@@ -368,7 +370,7 @@ export default function VisualizationPage({ data, onBack }: Props) {
                     ),
                 })),
             ];
-            
+
             // Recalculate cumulative values for all segments after insertion
             let cumulativeCost = 0;
             let cumulativeTime = 0;
@@ -378,7 +380,7 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 seg.cumulative_cost = cumulativeCost;
                 seg.cumulative_time_hours = cumulativeTime;
             }
-            
+
             // Create updated route with new segments
             const updatedRoute = {
                 ...bestRoute,
@@ -389,13 +391,13 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 total_time_hours: cumulativeTime,
                 label: `${bestRoute.label} +${selectedStop.city}`,
             };
-            
+
             // Update the routes state - replace the first route with modified version
             setPlannedRoutes((prev) => [updatedRoute, ...prev.slice(1)]);
             setSelectedRoute(updatedRoute);
-            
+
             console.log(`[Route] Inserted ${selectedStop.city} between ${fromNode.city} and ${toNode.city}`);
-            
+
         } catch (err) {
             console.error("Failed to insert stop into route:", err);
             setRoutesError(err instanceof Error ? err.message : "Failed to insert stop");
@@ -404,8 +406,10 @@ export default function VisualizationPage({ data, onBack }: Props) {
         }
     };
 
-    // Detail panel state
-    const [panelOpen, setPanelOpen] = useState(true);
+    // ── Dashboard State ──
+    const [dashboardOpen, setDashboardOpen] = useState(false);
+    const [blueprintExpanded, setBlueprintExpanded] = useState(false);
+    const [highlightedRoute, setHighlightedRoute] = useState<"main" | "alt" | null>(null);
 
     // ── Agent Pipeline State ──
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -430,6 +434,12 @@ export default function VisualizationPage({ data, onBack }: Props) {
                         delay_days: disruption && s.id === disruption.node.id ? 3.0 : 0.0,
                     })),
                     mode: operatingMode,
+                    // Product info for agent decision-making
+                    is_fragile: (data as any).productInfo?.isFragile || false,
+                    has_expiry: (data as any).productInfo?.hasExpiry || false,
+                    expiry_days: (data as any).productInfo?.expiryDays || 0,
+                    quantity: (data as any).productInfo?.quantity || 0,
+                    daily_demand: (data as any).productInfo?.dailyDemand || 0,
                 };
                 const res = await fetch(`${API_BASE}/run-agents`, {
                     method: "POST",
@@ -512,12 +522,17 @@ export default function VisualizationPage({ data, onBack }: Props) {
                         const segMode = segmentModes[i] || "sea";
                         const baseColor = segDisrupt ? "#dc2626" : past ? "#059669" : segMode === "air" ? "#7c3aed" : "#2563eb";
                         const dash = segDisrupt ? "8 6" : segMode === "air" ? "8 4" : undefined;
+                        const isHighlighted = highlightedRoute === "main";
+                        const isDimmed = highlightedRoute === "alt";
+                        const weight = isHighlighted ? 6 : isDimmed ? 2 : 4;
+                        const opacity = isDimmed ? 0.25 : 0.8;
 
                         return (
                             <React.Fragment key={`seg-${i}`}>
                                 <Polyline
                                     positions={pts}
-                                    pathOptions={{ color: baseColor, weight: 4, opacity: 0.8, dashArray: dash }}
+                                    pathOptions={{ color: baseColor, weight, opacity, dashArray: dash }}
+                                    eventHandlers={{ click: () => setHighlightedRoute(highlightedRoute === "main" ? null : "main") }}
                                 />
                                 <Polyline
                                     positions={pts}
@@ -534,11 +549,14 @@ export default function VisualizationPage({ data, onBack }: Props) {
                         const from = altRoute[i];
                         const to = altRoute[i + 1];
                         const pts = curvedPath([from.lat, from.lng], [to.lat, to.lng], 30);
+                        const isHighlighted = highlightedRoute === "alt";
+                        const isDimmed = highlightedRoute === "main";
                         return (
                             <React.Fragment key={`alt-${i}`}>
                                 <Polyline
                                     positions={pts}
-                                    pathOptions={{ color: "#3b82f6", weight: 3, opacity: 0.6, dashArray: "6 8" }}
+                                    pathOptions={{ color: "#3b82f6", weight: isHighlighted ? 5 : isDimmed ? 1.5 : 3, opacity: isDimmed ? 0.15 : 0.6, dashArray: "6 8" }}
+                                    eventHandlers={{ click: () => setHighlightedRoute(highlightedRoute === "alt" ? null : "alt") }}
                                 />
                                 <Polyline
                                     positions={pts}
@@ -616,206 +634,237 @@ export default function VisualizationPage({ data, onBack }: Props) {
                 </div>
             </div>
 
-            {/* Side Panel */}
-            <div className={`viz-panel ${panelOpen ? "viz-panel--open" : ""}`}>
-                <button className="viz-panel__toggle" onClick={() => setPanelOpen(!panelOpen)}>
-                    <ChevronRight size={16} className={panelOpen ? "viz-panel__toggle-icon--open" : ""} />
+            {/* ── Dashboard Toggle Button ── */}
+            {!dashboardOpen && (
+                <button
+                    className="dash-toggle"
+                    onClick={() => setDashboardOpen(true)}
+                    type="button"
+                >
+                    <span className="dash-toggle__icon"><ChevronLeft size={16} /></span>
+                    Dashboard
                 </button>
+            )}
 
-                <div className="viz-panel__content">
-                    <h3 className="viz-panel__title">
-                        <Route size={16} /> Route Summary
-                    </h3>
-
-                    {/* Route chain */}
-                    <div className="viz-chain">
-                        {routeNodes.map((node, i) => {
-                            const isDisrupted = disruption ? node.id === disruption.node.id : false;
-                            const isCurrent = currentPosition ? node.id === currentPosition.id : false;
-                            const isPast = currentIdx > i || (currentIdx === i && i < routeNodes.length - 1);
-                            const isFirst = i === 0;
-                            const isLast = i === routeNodes.length - 1;
-
-                            return (
-                                <React.Fragment key={node.id}>
-                                    <div className={`viz-chain__node ${isDisrupted ? "viz-chain__node--bad" : ""} ${isCurrent ? "viz-chain__node--current" : ""} ${isPast ? "viz-chain__node--past" : ""}`}>
-                                        <div className={`viz-chain__dot ${isDisrupted ? "viz-chain__dot--bad" : isCurrent ? "viz-chain__dot--current" : isFirst ? "viz-chain__dot--green" : isLast ? "viz-chain__dot--red" : "viz-chain__dot--blue"}`} />
-                                        <div className="viz-chain__info">
-                                            <span className="viz-chain__name">{node.name}</span>
-                                            <span className="viz-chain__meta">
-                                                {node.country} · {node.type === "airport" ? "Airport" : "Port"}
-                                                {isCurrent && <span className="viz-chain__badge viz-chain__badge--green">Current</span>}
-                                                {isDisrupted && <span className="viz-chain__badge viz-chain__badge--red">{disruption!.type}</span>}
-                                                {isFirst && <span className="viz-chain__badge viz-chain__badge--gray">Origin</span>}
-                                                {isLast && <span className="viz-chain__badge viz-chain__badge--gray">Dest</span>}
-                                            </span>
-                                        </div>
-                                        {isCurrent && (
-                                            <div className="viz-chain__transport">
-                                                {mode === "sea" ? <Ship size={16} /> : <Plane size={16} />}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {i < routeNodes.length - 1 && (
-                                        <div className={`viz-chain__conn ${isDisrupted || (disruption && routeNodes[i + 1].id === disruption.node.id) ? "viz-chain__conn--bad" : isPast ? "viz-chain__conn--past" : ""}`} />
-                                    )}
-                                </React.Fragment>
-                            );
-                        })}
-                    </div>
-
-                    {/* Disruption info */}
-                    {disruption && (
-                        <div className="viz-section">
-                            <h4 className="viz-section__title"><AlertTriangle size={14} /> Disruption Details</h4>
-                            <div className="viz-alert viz-alert--red">
-                                <div className="viz-alert__title">{disruption.type}</div>
-                                <div className="viz-alert__detail">At: <strong>{disruption.node.name}</strong></div>
-                                <div className="viz-alert__detail">{disruption.description}</div>
+            {/* ── Sliding Dashboard Panel (right side) ── */}
+            <div className={`dash-panel ${dashboardOpen ? "dash-panel--open" : ""}`}>
+                {/* Dashboard Header */}
+                <div className="dash-header">
+                    <div className="dash-header__left">
+                        <Shield size={20} color="var(--accent)" />
+                        <div>
+                            <div className="dash-header__title">Disruption Shield Dashboard</div>
+                            <div className="dash-header__subtitle">
+                                {routeNodes[0]?.name} → {routeNodes[routeNodes.length - 1]?.name} · {routeNodes.length} nodes
                             </div>
                         </div>
-                    )}
+                    </div>
+                    <button className="dash-header__close" onClick={() => setDashboardOpen(false)} type="button">
+                        <ChevronRight size={14} /> Close
+                    </button>
+                </div>
 
-                    {/* Alternative route */}
-                    {altRoute && (
-                        <div className="viz-section">
-                            <h4 className="viz-section__title"><GitBranch size={14} /> Alternative Route</h4>
-                            <div className="viz-alert viz-alert--blue">
-                                <div className="viz-alert__title">Suggested Bypass</div>
-                                <div className="viz-alert__route">
-                                    {altRoute.map((n) => n.name).join(" → ")}
+                <div className="dash-content">
+
+                    {/* ── 4 Agent Result Cards ── */}
+                    <div className="dash-agents">
+                        {/* 1. Monitoring Agent */}
+                        <div className={`dash-agent-card dash-agent-card--monitoring ${agentLoading ? "dash-agent-card--loading" : ""}`}>
+                            <div className="dash-agent-card__header">
+                                <div className="dash-agent-card__icon"><Radar size={16} /></div>
+                                <div>
+                                    <div className="dash-agent-card__title">Agent 1</div>
+                                    <div className="dash-agent-card__subtitle">Monitoring</div>
                                 </div>
                             </div>
-                            <div className="viz-alert viz-alert--green">
-                                <div className="viz-alert__title"><Zap size={13} /> Recommendation</div>
-                                <div className="viz-alert__detail">
-                                    Reroute shipment via {altRoute.filter((n) => !routeNodes.some((rn) => rn.id === n.id)).map((n) => n.name).join(", ")} to bypass the disruption at {disruption?.node.name}.
+                            <div className="dash-agent-card__body">
+                                {agentLoading ? (
+                                    <Loader2 size={20} className="viz-spinner" />
+                                ) : agentResult?.monitoring ? (
+                                    <>
+                                        <div className="dash-agent-card__kpi">
+                                            {agentResult.monitoring.total_transit_days?.toFixed(1)}d transit
+                                        </div>
+                                        <div className="dash-agent-card__badge dash-agent-card__badge--info">
+                                            ETA: {agentResult.monitoring.total_eta}d · Delay: {agentResult.monitoring.total_delay}d
+                                        </div>
+                                        <div className="dash-agent-card__detail">
+                                            {agentResult.monitoring.llm_analysis || agentResult.monitoring.disruption_summary || "Route monitoring complete."}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="dash-agent-card__detail">Awaiting pipeline results...</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 2. Risk Agent */}
+                        <div className={`dash-agent-card dash-agent-card--risk ${agentLoading ? "dash-agent-card--loading" : ""}`}>
+                            <div className="dash-agent-card__header">
+                                <div className="dash-agent-card__icon"><Shield size={16} /></div>
+                                <div>
+                                    <div className="dash-agent-card__title">Agent 2</div>
+                                    <div className="dash-agent-card__subtitle">Risk Assessment</div>
                                 </div>
                             </div>
+                            <div className="dash-agent-card__body">
+                                {agentLoading ? (
+                                    <Loader2 size={20} className="viz-spinner" />
+                                ) : agentResult?.risk ? (
+                                    <>
+                                        <div className="dash-agent-card__kpi">
+                                            ${agentResult.risk.revenue_loss?.toLocaleString() || "0"}
+                                        </div>
+                                        <div className={`dash-agent-card__badge dash-agent-card__badge--${agentResult.risk.risk_level?.toLowerCase() || "low"}`}>
+                                            {agentResult.risk.risk_level || "N/A"}
+                                        </div>
+                                        <div className="dash-agent-card__detail">
+                                            Stockout: {agentResult.risk.stockout_days}d · Arrival: {agentResult.risk.shipment_arrival_days}d
+                                            {agentResult.risk.llm_analysis && <><br />{agentResult.risk.llm_analysis}</>}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="dash-agent-card__detail">Awaiting pipeline results...</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 3. Planner Agent */}
+                        <div className={`dash-agent-card dash-agent-card--planner ${agentLoading ? "dash-agent-card--loading" : ""}`}>
+                            <div className="dash-agent-card__header">
+                                <div className="dash-agent-card__icon"><Navigation size={16} /></div>
+                                <div>
+                                    <div className="dash-agent-card__title">Agent 3</div>
+                                    <div className="dash-agent-card__subtitle">Recovery Planner</div>
+                                </div>
+                            </div>
+                            <div className="dash-agent-card__body">
+                                {agentLoading ? (
+                                    <Loader2 size={20} className="viz-spinner" />
+                                ) : agentResult?.planner?.options ? (
+                                    <>
+                                        <div className="dash-agent-card__kpi">
+                                            {agentResult.planner.options.length} options
+                                        </div>
+                                        {agentResult.planner.options.slice(0, 2).map((opt: { option_name: string; total_impact: number; timeline_days: number }, i: number) => (
+                                            <div key={i} className="dash-agent-card__badge dash-agent-card__badge--info">
+                                                {opt.option_name}: ${opt.total_impact?.toLocaleString()}
+                                            </div>
+                                        ))}
+                                        <div className="dash-agent-card__detail">
+                                            {agentResult.planner.llm_analysis || "Recovery scenarios generated."}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="dash-agent-card__detail">Awaiting pipeline results...</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 4. Decision Agent */}
+                        <div className={`dash-agent-card dash-agent-card--decision ${agentLoading ? "dash-agent-card--loading" : ""}`}>
+                            <div className="dash-agent-card__header">
+                                <div className="dash-agent-card__icon"><Brain size={16} /></div>
+                                <div>
+                                    <div className="dash-agent-card__title">Agent 4</div>
+                                    <div className="dash-agent-card__subtitle">Decision</div>
+                                </div>
+                            </div>
+                            <div className="dash-agent-card__body">
+                                {agentLoading ? (
+                                    <Loader2 size={20} className="viz-spinner" />
+                                ) : agentResult?.decision ? (
+                                    <>
+                                        <div className="dash-agent-card__kpi">
+                                            {agentResult.decision.chosen_option?.option_name || "Pending"}
+                                        </div>
+                                        <div className="dash-agent-card__badge dash-agent-card__badge--success">
+                                            <CheckCircle2 size={10} />
+                                            ${agentResult.decision.chosen_option?.total_impact?.toLocaleString() || "—"} impact
+                                        </div>
+                                        <div className="dash-agent-card__detail">
+                                            {agentResult.decision.reasoning || "Decision analysis complete."}
+                                        </div>
+                                        {executionResult ? (
+                                            <div className="dash-agent-card__badge dash-agent-card__badge--success">
+                                                <CheckCircle2 size={10} /> Executed
+                                            </div>
+                                        ) : (
+                                            <button
+                                                className="dash-blueprint-expand"
+                                                onClick={() => handleExecutePlan(agentResult.decision.chosen_option?.option_name)}
+                                                type="button"
+                                                style={{ marginTop: 4 }}
+                                            >
+                                                <Zap size={12} /> Execute Plan
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="dash-agent-card__detail">Awaiting pipeline results...</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Blueprint Route Viewer Section ── */}
+                    <div className="dash-blueprint-section">
+                        <div className="dash-blueprint-header">
+                            <div className="dash-blueprint-title">
+                                <Route size={16} /> Route Blueprint
+                            </div>
+                            <button
+                                className="dash-blueprint-expand"
+                                onClick={() => setBlueprintExpanded(true)}
+                                type="button"
+                            >
+                                <Maximize2 size={13} /> Expand
+                            </button>
+                        </div>
+                        <div className="dash-blueprint-content">
+                            <BlueprintRouteViewer
+                                routes={plannedRoutes}
+                                loading={routesLoading}
+                                availableNodes={availableNodes}
+                                onRouteSelect={handleRouteSelect}
+                                onCustomRouteRequest={handleCustomRouteRequest}
+                            />
+                            {routesError && (
+                                <div className="viz-alert viz-alert--red" style={{ marginTop: 10 }}>
+                                    <div className="viz-alert__title">Route Planning Error</div>
+                                    <div className="viz-alert__detail">{routesError}</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {agentError && (
+                        <div className="viz-alert viz-alert--red">
+                            <div className="viz-alert__title">Pipeline Error</div>
+                            <div className="viz-alert__detail">{agentError}</div>
                         </div>
                     )}
+                </div>
+            </div>
 
-                    {/* Shipment details */}
-                    <div className="viz-section">
-                        <h4 className="viz-section__title"><Info size={14} /> Details</h4>
-                        <div className="viz-details">
-                            <div className="viz-details__row"><span>Transport</span><span>{mode === "sea" ? "Sea Freight" : "Air Freight"}</span></div>
-                            <div className="viz-details__row"><span>Stops</span><span>{routeNodes.length} nodes</span></div>
-                            <div className="viz-details__row"><span>Mode</span><span className={operatingMode === "realtime" ? "viz-details__val--blue" : "viz-details__val--amber"}>{operatingMode === "realtime" ? "🌐 Live" : "🔬 Simulation"}</span></div>
-                            <div className="viz-details__row"><span>Status</span><span className={disruption ? "viz-details__val--red" : "viz-details__val--green"}>{disruption ? "Disrupted" : "On Track"}</span></div>
-                            {currentPosition && <div className="viz-details__row"><span>Current</span><span>{currentPosition.name}</span></div>}
+            {/* ── Blueprint Expanded Overlay ── */}
+            {blueprintExpanded && (
+                <div className="dash-blueprint-overlay">
+                    <div className="dash-blueprint-overlay__header">
+                        <div className="dash-blueprint-overlay__title">
+                            <Route size={18} /> Route Blueprint — Expanded View
                         </div>
+                        <button
+                            className="dash-blueprint-overlay__close"
+                            onClick={() => setBlueprintExpanded(false)}
+                            type="button"
+                        >
+                            <X size={18} />
+                        </button>
                     </div>
-
-                    {/* ── Agent Pipeline Results ── */}
-                    <div className="viz-section">
-                        <h4 className="viz-section__title"><Brain size={14} /> AI Agent Pipeline</h4>
-
-                        {agentLoading && (
-                            <div className="viz-agent-loading">
-                                <Loader2 size={20} className="viz-spinner" />
-                                <span>Running 4-agent pipeline{operatingMode === "realtime" ? " (searching web...)" : ""}...</span>
-                            </div>
-                        )}
-
-                        {agentError && (
-                            <div className="viz-alert viz-alert--red">
-                                <div className="viz-alert__title">Pipeline Error</div>
-                                <div className="viz-alert__detail">{agentError}</div>
-                            </div>
-                        )}
-
-                        {agentResult && (
-                            <>
-                                {/* Risk Assessment */}
-                                {agentResult.risk && (
-                                    <div className="viz-agent-card">
-                                        <div className="viz-agent-card__header">
-                                            <Shield size={14} />
-                                            <span>Risk Assessment</span>
-                                            <span className={`viz-risk-badge viz-risk-badge--${agentResult.risk.risk_level?.toLowerCase()}`}>
-                                                {agentResult.risk.risk_level}
-                                            </span>
-                                        </div>
-                                        <div className="viz-agent-stats">
-                                            <div className="viz-agent-stat">
-                                                <TrendingDown size={13} />
-                                                <span>Stockout: {agentResult.risk.stockout_days}d</span>
-                                            </div>
-                                            <div className="viz-agent-stat">
-                                                <Clock size={13} />
-                                                <span>Arrival: {agentResult.risk.shipment_arrival_days}d</span>
-                                            </div>
-                                            <div className="viz-agent-stat">
-                                                <DollarSign size={13} />
-                                                <span>Loss: ${agentResult.risk.revenue_loss?.toLocaleString()}</span>
-                                            </div>
-                                        </div>
-                                        {agentResult.risk.llm_analysis && (
-                                            <div className="viz-agent-analysis">{agentResult.risk.llm_analysis}</div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Recovery Scenarios */}
-                                {agentResult.planner?.options && (
-                                    <div className="viz-agent-card">
-                                        <div className="viz-agent-card__header">
-                                            <Navigation size={14} />
-                                            <span>Recovery Options</span>
-                                        </div>
-                                        {agentResult.planner.options.map((opt: { option_name: string; cost: number; projected_loss: number; total_impact: number; timeline_days: number }, i: number) => {
-                                            const isChosen = agentResult.decision?.chosen_option?.option_name === opt.option_name;
-                                            return (
-                                                <div key={i} className={`viz-scenario ${isChosen ? "viz-scenario--chosen" : ""}`}>
-                                                    <div className="viz-scenario__name">
-                                                        {isChosen && <CheckCircle2 size={13} />}
-                                                        {opt.option_name}
-                                                    </div>
-                                                    <div className="viz-scenario__meta">
-                                                        Cost: ${opt.cost?.toLocaleString()} · Loss: ${opt.projected_loss?.toLocaleString()} · {opt.timeline_days}d
-                                                    </div>
-                                                    {isChosen && (
-                                                        <button
-                                                            className="viz-execute-btn"
-                                                            onClick={() => handleExecutePlan(opt.option_name)}
-                                                            type="button"
-                                                        >
-                                                            <Zap size={13} /> Execute Plan
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* AI Decision Reasoning */}
-                                {agentResult.decision?.reasoning && (
-                                    <div className="viz-agent-card viz-agent-card--reasoning">
-                                        <div className="viz-agent-card__header">
-                                            <Brain size={14} />
-                                            <span>AI Reasoning</span>
-                                        </div>
-                                        <div className="viz-agent-analysis">{agentResult.decision.reasoning}</div>
-                                    </div>
-                                )}
-
-                                {/* Execution Result */}
-                                {executionResult && (
-                                    <div className="viz-alert viz-alert--green">
-                                        <div className="viz-alert__title"><CheckCircle2 size={13} /> Plan Executed</div>
-                                        <div className="viz-alert__detail">{executionResult}</div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-
-                    {/* ── Blueprint Route Viewer ── */}
-                    <div className="viz-blueprint-section">
-                        <BlueprintRouteViewer 
-                            routes={plannedRoutes} 
+                    <div className="dash-blueprint-overlay__content">
+                        <BlueprintRouteViewer
+                            routes={plannedRoutes}
                             loading={routesLoading}
                             availableNodes={availableNodes}
                             onRouteSelect={handleRouteSelect}
@@ -829,7 +878,7 @@ export default function VisualizationPage({ data, onBack }: Props) {
                         )}
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
